@@ -1,0 +1,27 @@
+[project]
+name = "mzi"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Henadzi Khviasko",email = "henadzi.khviasko@pynest.io"}
+]
+requires-python = ">=3.12,<4"
+dependencies = [
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+package-mode = false
+
+[tool.poetry.group.dev.dependencies]
+isort = "^6.0.1"
+
+[tool.isort]
+profile = "black"
+line_length = 88
+multi_line_output = 1
+include_trailing_comma = true
