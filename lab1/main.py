@@ -85,29 +85,6 @@ class GOST28147_89:
         logger.debug(f"Зашифрованный блок: {encrypted_block.hex()}")
         return encrypted_block
 
-    def decrypt_block(self, block: bytes) -> bytes:
-        if len(block) != 8:
-            logger.error("Неверная длина блока для расшифрования. Ожидается 8 байт.")
-            raise ValueError("Блок должен быть длиной 8 байт (64 бита).")
-
-        logger.debug(f"Расшифрование блока: {block.hex()}")
-
-        n2, n1 = struct.unpack('<II', block)
-        logger.debug(f"Начальные значения для расшифровки N1: {hex(n1)}, N2: {hex(n2)}")
-
-        key_order = [0, 1, 2, 3, 4, 5, 6, 7, 7, 6, 5, 4, 3, 2, 1, 0,
-                     0, 1, 2, 3, 4, 5, 6, 7, 0, 1, 2, 3, 4, 5, 6, 7]
-
-        for i in range(32):
-            k_index = key_order[i]
-            round_key = self.subkeys[k_index]
-            logger.debug(f"Раунд расшифровки {i + 1}, подключ K{k_index} ({hex(round_key)})")
-            n1, n2 = self._feistel_round(n1, n2, round_key)
-
-        decrypted_block = struct.pack('<II', n1, n2)
-        logger.debug(f"Расшифрованный блок: {decrypted_block.hex()}")
-        return decrypted_block
-
 
 class GOSTGammaMode:
     def __init__(self, cipher: GOST28147_89):
