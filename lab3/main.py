@@ -45,7 +45,7 @@ def generate_prime(bits):
         if p.bit_length() != bits:
             continue
         if is_probable_prime(p):
-            logger.debug(f"Generated prime p (bits={bits}): {p}")
+            logger.debug(f"Сгенерировано простое число p (бит={bits}): {p}")
             return p
 
 
@@ -59,7 +59,7 @@ def egcd(a, b):
 def inv_mod(a, m):
     g, x, y = egcd(a, m)
     if g != 1:
-        raise ValueError("No modular inverse")
+        raise ValueError("Модульное обратное не существует")
     return x % m
 
 
@@ -71,13 +71,13 @@ class RabinKeyPair:
 
     @classmethod
     def generate(cls, bits_each=256):
-        logger.info("Generating Rabin key pair...")
+        logger.info("Генерация пары ключей Рабина...")
         p = generate_prime(bits_each)
         q = generate_prime(bits_each)
         while q == p:
             q = generate_prime(bits_each)
         n = p * q
-        logger.info(f"Generated keys: p_bits={p.bit_length()}, q_bits={q.bit_length()}, n_bits={n.bit_length()}")
+        logger.info(f"Ключи сгенерированы: p_бит={p.bit_length()}, q_бит={q.bit_length()}, n_бит={n.bit_length()}")
         return cls(p=p, q=q, n=n)
 
 
@@ -91,13 +91,13 @@ class RabinCrypto:
         self.block_size = (self.n.bit_length() - 1) // 8
         min_overhead = 1 + len(self.PADDING_MARKER) + self.CHECKSUM_LEN
         if self.block_size <= min_overhead:
-            raise ValueError("Key too small for padding. Increase key size.")
+            raise ValueError("Ключ слишком мал для паддинга. Увеличьте размер ключа.")
         self.usable_bytes = self.block_size - min_overhead
         logger.info(
-            f"RabinCrypto initialized: "
-            f"n_bits={self.n.bit_length()}, "
-            f"block_size={self.block_size}, "
-            f"usable_bytes={self.usable_bytes}"
+            f"RabinCrypto инициализирован: "
+            f"n_бит={self.n.bit_length()}, "
+            f"размер_блока={self.block_size}, "
+            f"полезных_байт={self.usable_bytes}"
         )
 
     def _pad_block(self, data: bytes) -> bytes:
@@ -135,11 +135,11 @@ class RabinCrypto:
             padded = self._pad_block(chunk)
             m = self._bytes_to_int(padded)
             if m >= self.n:
-                raise ValueError("Padded block integer >= n; increase key size or decrease block size.")
+                raise ValueError("Целое число паддинг-блока >= n; увеличьте ключ или уменьшите блок.")
             c = self._encrypt_int(m)
             c_bytes = self._int_to_bytes(c, (self.n.bit_length() + 7)//8)
             ciphertext_blocks.append(c_bytes)
-            logger.debug(f"Encrypted block {chunk!r} -> c_len={len(c_bytes)}")
+            logger.debug(f"Зашифрован блок {chunk!r} -> длина_шифротекста={len(c_bytes)}")
         n_bytes = self._int_to_bytes(self.n, (self.n.bit_length() + 7)//8)
         out = io.BytesIO()
         out.write(struct.pack(">I", len(n_bytes)))
@@ -159,7 +159,7 @@ class RabinCrypto:
         n = self.n
         g, a, b = egcd(p, q)
         if g != 1:
-            raise ValueError("p and q are not coprime")
+            raise ValueError("p и q не взаимно просты")
         r1 = (a * p * mq + b * q * mp) % n
         r2 = n - r1
         r3 = (a * p * mq - b * q * mp) % n
@@ -172,7 +172,7 @@ class RabinCrypto:
         mp = self._sqrt_mod_prime(c % p, p)
         mq = self._sqrt_mod_prime(c % q, q)
         roots = self._crt_combine(mp, mq)
-        logger.debug(f"Computed roots: {roots}")
+        logger.debug(f"Вычислены корни: {roots}")
         byte_len = (n.bit_length() + 7)//8
         for r in roots:
             b = self._int_to_bytes(r, byte_len)
@@ -180,47 +180,47 @@ class RabinCrypto:
                 candidate = b[start:]
                 res = self._unpad_and_verify(candidate)
                 if res is not None:
-                    logger.debug(f"Found correct root at start={start}")
+                    logger.debug(f"Найден корректный корень при сдвиге={start}")
                     return res
-        raise ValueError("Failed to decrypt block: no valid padding found among roots.")
+        raise ValueError("Не удалось расшифровать блок: среди корней не найдено валидного паддинга.")
 
     def decrypt(self, blob: bytes) -> bytes:
         buf = io.BytesIO(blob)
         n_len_packed = buf.read(4)
         if len(n_len_packed) != 4:
-            raise ValueError("Invalid ciphertext format (n length).")
+            raise ValueError("Неверный формат шифротекста (длина n).")
         (n_len,) = struct.unpack(">I", n_len_packed)
         n_bytes = buf.read(n_len)
         if len(n_bytes) != n_len:
-            raise ValueError("Invalid ciphertext format (n bytes).")
+            raise ValueError("Неверный формат шифротекста (байты n).")
         n_from_file = int.from_bytes(n_bytes, 'big')
         if n_from_file != self.n:
-            logger.warning("Public modulus in ciphertext does not match provided keypair.n")
+            logger.warning("Публичный модуль в шифротексте не совпадает с keypair.n")
         (block_count,) = struct.unpack(">H", buf.read(2))
         plaintext_parts = []
         for i in range(block_count):
             (c_len,) = struct.unpack(">H", buf.read(2))
             c_bytes = buf.read(c_len)
             if len(c_bytes) != c_len:
-                raise ValueError("Invalid ciphertext format (c bytes).")
+                raise ValueError("Неверный формат шифротекста (байты c).")
             c_int = int.from_bytes(c_bytes, 'big')
             part = self._decrypt_int(c_int)
             plaintext_parts.append(part)
-            logger.debug(f"Decrypted block {i+1}/{block_count}")
+            logger.debug(f"Расшифрован блок {i+1}/{block_count}")
         return b''.join(plaintext_parts)
 
 
 def main():
     kp = RabinKeyPair.generate(bits_each=64)
     rc = RabinCrypto(kp)
-    message = b"Hello, Rabin! This is a short test message."
-    logger.info(f"Original message ({len(message)} bytes): {message!r}")
+    message = "Привет, Rabin! Это короткое тестовое сообщение.".encode('utf-8')
+    logger.info(f"Исходное сообщение ({len(message)} байт): {message!r}")
     ciphertext = rc.encrypt(message)
-    logger.info(f"Ciphertext size: {len(ciphertext)} bytes")
+    logger.info(f"Размер шифротекста: {len(ciphertext)} байт")
     recovered = rc.decrypt(ciphertext)
-    logger.info(f"Recovered message ({len(recovered)} bytes): {recovered!r}")
+    logger.info(f"Восстановленное сообщение ({len(recovered)} байт): {recovered!r}")
     assert recovered == message
-    logger.info("Demo successful: recovered == original")
+    logger.info("Демонстрация успешна: восстановленное == исходное")
 
 
 if __name__ == "__main__":
