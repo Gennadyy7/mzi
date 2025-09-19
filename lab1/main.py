@@ -1,7 +1,7 @@
 import logging
+import os
 import struct
 from typing import List, Tuple
-import os
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
