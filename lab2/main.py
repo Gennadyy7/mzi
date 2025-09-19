@@ -117,42 +117,6 @@ class CipherMode(ABC):
         pass
 
 
-class ECBMode(CipherMode):
-    @staticmethod
-    def _pad(data: bytes) -> bytes:
-        pad_len = 16 - (len(data) % 16)
-        return data + bytes([pad_len]) * pad_len
-
-    @staticmethod
-    def _unpad(data: bytes) -> bytes:
-        pad_len = data[-1]
-        if pad_len < 1 or pad_len > 16 or data[-pad_len:] != bytes([pad_len]) * pad_len:
-            raise ValueError("Некорректный паддинг")
-        return data[:-pad_len]
-
-    def encrypt_file(self, input_path, output_path, iv=None):
-        with open(input_path, 'rb') as f:
-            data = f.read()
-        data = self._pad(data)
-        out = bytearray()
-        for i in range(0, len(data), 16):
-            out += self.cipher.encrypt_block(data[i:i+16])
-        with open(output_path, 'wb') as f:
-            f.write(out)
-
-    def decrypt_file(self, input_path, output_path, iv=None):
-        with open(input_path, 'rb') as f:
-            data = f.read()
-        if len(data) % 16 != 0:
-            raise ValueError("Некорректная длина шифротекста")
-        out = bytearray()
-        for i in range(0, len(data), 16):
-            out += self.cipher.decrypt_block(data[i:i+16])
-        out = self._unpad(bytes(out))
-        with open(output_path, 'wb') as f:
-            f.write(out)
-
-
 class CFBMode(CipherMode):
     def encrypt_file(self, input_path, output_path, iv=None):
         if iv is None or len(iv) != 16:
@@ -191,22 +155,24 @@ def main():
     key = bytes.fromhex("000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F")
     iv = bytes.fromhex("FEDCBA98765432100123456789ABCDEF")
     cipher = BelCipher(key)
-    ecb = ECBMode(cipher)
     cfb = CFBMode(cipher)
 
-    test_content = b"Hello, World! This is a test for Belarusian cipher.\nLine 2.\nLine 3 with some more text."
-    with open("test_input.txt", "wb") as f:
-        f.write(test_content)
+    test_content_str = "Привет, мир! This is a test for Belarusian cipher.\nLine 2.\nLine 3 with some more text."
+    test_content_bytes = test_content_str.encode("utf-8")
 
-    ecb.encrypt_file("test_input.txt", "ecb_enc.bin")
-    ecb.decrypt_file("ecb_enc.bin", "ecb_dec.txt")
-    with open("ecb_dec.txt", "rb") as f:
-        print("ECB:", f.read() == test_content)
+    with open("test_input.txt", "wb") as f:
+        f.write(test_content_bytes)
 
     cfb.encrypt_file("test_input.txt", "cfb_enc.bin", iv)
     cfb.decrypt_file("cfb_enc.bin", "cfb_dec.txt", iv)
+
     with open("cfb_dec.txt", "rb") as f:
-        print("CFB:", f.read() == test_content)
+        decrypted_str = f.read().decode("utf-8")
+
+    print("CFB:", decrypted_str == test_content_str)
+    if decrypted_str != test_content_str:
+        print("Ожидалось:", repr(test_content_str))
+        print("Получено :", repr(decrypted_str))
 
 
 if __name__ == "__main__":
