@@ -103,6 +103,9 @@ dmypy.json
 *.log
 *.sqlite3
 
+*.txt
+*.bin
+
 # OS generated files
 .DS_Store
 .DS_Store?

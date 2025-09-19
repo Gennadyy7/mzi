@@ -1,17 +1,3 @@
-import logging
-from abc import ABC, abstractmethod
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.FileHandler("cipher.log", encoding="utf-8"),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
-
-
 class BelCipher:
     _H_TABLE = [
         0xB1,0x94,0xBA,0xC8,0x0A,0x08,0xF5,0x3B,0x36,0x6D,0x00,0x8E,0x58,0x4A,0x5D,0xE4,
@@ -104,20 +90,10 @@ class BelCipher:
         return y
 
 
-class CipherMode(ABC):
+class CFBMode:
     def __init__(self, cipher: BelCipher):
         self.cipher = cipher
 
-    @abstractmethod
-    def encrypt_file(self, input_path, output_path, iv=None):
-        pass
-
-    @abstractmethod
-    def decrypt_file(self, input_path, output_path, iv=None):
-        pass
-
-
-class CFBMode(CipherMode):
     def encrypt_file(self, input_path, output_path, iv=None):
         if iv is None or len(iv) != 16:
             raise ValueError("CFB требует IV длиной 16 байт")
