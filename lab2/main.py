@@ -134,6 +134,9 @@ def main():
     cfb = CFBMode(cipher)
 
     test_content_str = "Привет, мир! This is a test for Belarusian cipher.\nLine 2.\nLine 3 with some more text."
+    print(f'Исходный текст: "{test_content_str}"')
+    print(f'Ключ: "{key}"')
+    print(f'IV: "{iv}"')
     test_content_bytes = test_content_str.encode("utf-8")
 
     with open("test_input.txt", "wb") as f:
@@ -145,7 +148,7 @@ def main():
     with open("cfb_dec.txt", "rb") as f:
         decrypted_str = f.read().decode("utf-8")
 
-    print("CFB:", decrypted_str == test_content_str)
+    print("Результат сравнения (CFB):", decrypted_str == test_content_str)
     if decrypted_str != test_content_str:
         print("Ожидалось:", repr(test_content_str))
         print("Получено :", repr(decrypted_str))
