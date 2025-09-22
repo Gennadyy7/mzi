@@ -22,13 +22,13 @@ class BelCipher:
         if len(key) != 32:
             raise ValueError("Ключ должен быть длиной 256 бит (32 байта).")
         self._theta = [int.from_bytes(key[i*4:(i+1)*4], 'little') for i in range(8)]
-        self._K = [self._theta[j % 8] for j in range(56)]
+        self._K = [self._theta[j % 8] for j in range(56)] # 32 бита
 
     @staticmethod
     def _rotl32(x, r):
         return ((x << r) | (x >> (32 - r))) & 0xFFFFFFFF
 
-    def _g(self, u, r):
+    def _g(self, u, r): # u 32 битное слово для преобразования, r количество бит для циклического сдвига влево
         b = [(u >> (8*i)) & 0xFF for i in range(4)]
         hb = [self._H_TABLE[x] for x in b]
         hword = hb[0] | (hb[1] << 8) | (hb[2] << 16) | (hb[3] << 24)
@@ -59,34 +59,6 @@ class BelCipher:
             b, c = c, b
 
         y = b.to_bytes(4, 'little') + d.to_bytes(4, 'little') + a.to_bytes(4, 'little') + c.to_bytes(4, 'little')
-        return y
-
-    def decrypt_block(self, block: bytes) -> bytes:
-        if len(block) != 16:
-            raise ValueError("Блок должен быть 16 байт.")
-        a = int.from_bytes(block[0:4], 'little')
-        b = int.from_bytes(block[4:8], 'little')
-        c = int.from_bytes(block[8:12], 'little')
-        d = int.from_bytes(block[12:16], 'little')
-
-        for i in range(8, 0, -1):
-            k = self._K[7*(i-1):7*i]
-
-            b ^= self._g(a ^ k[6], 5)
-            c ^= self._g(d ^ k[5], 21)
-            a ^= self._g(b ^ k[4], 13)
-            e = self._g((b ^ c) ^ k[3], 21) ^ i
-            b ^= e
-            c ^= e
-            d ^= self._g(c ^ k[2], 13)
-            b ^= self._g(a ^ k[1], 21)
-            c ^= self._g(d ^ k[0], 5)
-
-            a, b = b, a
-            c, d = d, c
-            a, d = d, a
-
-        y = c.to_bytes(4, 'little') + a.to_bytes(4, 'little') + d.to_bytes(4, 'little') + b.to_bytes(4, 'little')
         return y
 
 
