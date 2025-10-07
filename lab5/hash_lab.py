@@ -28,8 +28,6 @@ class SHA1:
         self._message_byte_length = 0
 
     def update(self, data: bytes):
-        if not isinstance(data, (bytes, bytearray)):
-            raise TypeError("data must be bytes")
         self._message_byte_length += len(data)
         data = self._unprocessed + data
         block_size = 64
@@ -145,50 +143,6 @@ class Streebog:
         0x07e095624504536c, 0x8d70c431ac02a736, 0xc83862965601dd1b, 0x641c314b2b8ee083
     )
 
-    C = (
-        bytes.fromhex(
-            "b1085bda1ecadae9ebcb2f81c0657c1f"
-            "71a7035d5b5b2a5a02f8b1a7b0a6c816"
-            "6f1f7c8fc5a0a2b2ff2a7b9f9f9df7ca"
-            "b1a8f2b4d0d6f2b7"
-        ) + b'\x00' * (64 - 48),
-
-    )
-
-    C_FULL = (
-        bytes.fromhex(
-            "b1085bda1ecadae9ebcb2f81c0657c1f"
-            "71a7035d5b5b2a5a02f8b1a7b0a6c818"
-            "0f0c9b274b8f4b2217b5c1f4c76dca3b"
-            "0c5d944e0f7a1b2765f98e5d1c3f4b20"
-        )[:64],
-
-    )
-
-    C_CONSTS = (
-        bytes.fromhex(
-            "b1085bda1ecadae9ebcb2f81c0657c1f"
-            "71a7035d5b5b2a5a02f8b1a7b0a6c816"
-            "6f1f7c8fc5a0a2b2ff2a7b9f9f9df7ca"
-            "b1a8f2b4d0d6f2b7f3b0f9b8e276d41d"
-            "b1085bda1ecadae9ebcb2f81c0657c1f"
-            "71a7035d5b5b2a5a02f8b1a7b0a6c816"
-            "6f1f7c8fc5a0a2b2ff2a7b9f9f9df7ca"
-            "b1a8f2b4d0d6f2b7f3b0f9b8e276d41d"
-        )[:64],
-        bytes.fromhex(
-            "b12cc61f3b4b2f0fab6f3e3a6b9e1c58"
-            "ec5dbf3d2c107d1ab1c9a0f7e5d3c2b1"
-            "e8d4c3b2a19087766554433221100ffe"
-            "ddccbbaa99887766554433221100ffed"
-            "b12cc61f3b4b2f0fab6f3e3a6b9e1c58"
-            "ec5dbf3d2c107d1ab1c9a0f7e5d3c2b1"
-            "e8d4c3b2a19087766554433221100ffe"
-            "ddccbbaa99887766554433221100ffed"
-        )[:64],
-
-    )
-
     IV_512 = bytes([0] * 64)
     IV_256 = bytes([1] * 64)
 
@@ -259,57 +213,6 @@ class Streebog:
         return self._xor512(self._xor512(e, h), m)
 
     def _precompute_C(self):
-        C_hex = [
-            "b1085bda1ecadae9ebcb2f81c0657c1f"
-            "71a7035d5b5b2a5a02f8b1a7b0a6c816"
-            "6f1f7c8fc5a0a2b2ff2a7b9f9f9df7ca"
-            "b1a8f2b4d0d6f2b7f3b0f9b8e276d41d",
-            "e6e0e5ff6b9b8b7a63a4e8f7d6c5b4a3"
-            "2f1f0e0d0c0b0a090807060504030201"
-            "f0e1d2c3b4a5968778695a4b3c2d1e0f"
-            "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
-            "02aa6f7b8c9d1e2f3a4b5c6d7e8f9012"
-            "3456789abcdef0123456789abcdef01"
-            "23456789abcdef0123456789abcdef01"
-            "23456789abcdef0123456789abcdef01",
-            "1f1e1d1c1b1a19181716151413121110"
-            "0f0e0d0c0b0a09080706050403020100"
-            "ffeeddccbbaa99887766554433221100"
-            "00112233445566778899aabbccddeeff",
-            "9f3e2d1c0b1a09182736455463728190"
-            "abcdef0123456789abcdef0123456789"
-            "0123456789abcdef0123456789abcdef"
-            "fedcba98765432100123456789abcdef",
-            "c3d2e1f00112233445566778899aabbc"
-            "ddeeff00112233445566778899aabbcc"
-            "ddeeff00112233445566778899aabbcc"
-            "ddeeff00112233445566778899aabbcc",
-            "aa55aa55aa55aa55aa55aa55aa55aa55"
-            "55aa55aa55aa55aa55aa55aa55aa55aa"
-            "55aa55aa55aa55aa55aa55aa55aa55aa"
-            "55aa55aa55aa55aa55aa55aa55aa55aa",
-            "11223344556677889900aabbccddeeff"
-            "00112233445566778899aabbccddeeff"
-            "00112233445566778899aabbccddeeff"
-            "00112233445566778899aabbccddeeff",
-            "deadbeefdeadbeefdeadbeefdeadbeef"
-            "deadbeefdeadbeefdeadbeefdeadbeef"
-            "cafebabecafebabecafebabecafebabe"
-            "01234567012345670123456701234567",
-            "0f1e2d3c4b5a69788796a5b4c3d2e1f0"
-            "f0e1d2c3b4a5968778695a4b3c2d1e0f"
-            "00112233445566778899aabbccddeeff"
-            "ffeeddccbbaa99887766554433221100",
-            "abcdef0123456789abcdef0123456789"
-            "0123456789abcdef0123456789abcdef"
-            "89abcdef0123456789abcdef01234567"
-            "0123456789abcdef0123456789abcdef",
-            "fedcba98765432100123456789abcdef"
-            "00112233445566778899aabbccddeeff"
-            "0102030405060708090a0b0c0d0e0f10"
-            "1112131415161718191a1b1c1d1e1f20"
-        ]
-
         self._C = []
         for i in range(12):
             seed = bytearray(64)
@@ -318,8 +221,6 @@ class Streebog:
             self._C.append(const)
 
     def update(self, data: bytes):
-        if not isinstance(data, (bytes, bytearray)):
-            raise TypeError("data must be bytes")
         self._message_byte_length += len(data)
         data = self._buffer + data
 
@@ -328,7 +229,8 @@ class Streebog:
             self._compress(block)
         self._buffer = data[len(data) // 64 * 64:]
 
-    def _add512(self, a: bytearray, b: bytes):
+    @staticmethod
+    def _add512(a: bytearray, b: bytes):
         carry = 0
         for i in range(63, -1, -1):
             s = a[i] + b[i] + carry
