@@ -78,7 +78,7 @@ class Hamming74(LinearCode):
             pos = self._syndrome_table.get(s)
             if pos is not None:
                 err[pos] = 1
-        corrected = (received + err) % 2
+        corrected = (received + err) % 2  # исправленное кодовое слово
         G = self._G
         for candidate in range(1 << self.k):  # поиск сообщения m такого, что m * G mod 2 = corrected (просто так решить относительно m не выйдет из-за необратимой матрицы G)
             m_bits = np.array([(candidate >> (self.k - 1 - i)) & 1 for i in range(self.k)], dtype=np.uint8)  # Преобразует целое число candidate в двоичный вектор длиной k=4. Например, для candidate = 5 (двоичное 0101) получается массив [0, 1, 0, 1].
