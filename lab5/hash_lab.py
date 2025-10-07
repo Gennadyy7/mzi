@@ -1,8 +1,5 @@
-from copy import copy
 from struct import pack
 from struct import unpack
-from abc import ABCMeta
-from abc import abstractmethod
 from codecs import getdecoder
 from codecs import getencoder
 
@@ -10,11 +7,6 @@ xrange = range
 
 
 def strxor(a, b):
-    """ XOR of two strings
-
-    This function will process only shortest length of both strings,
-    ignoring remaining one.
-    """
     mlen = min(len(a), len(b))
     a, b, xor = bytearray(a), bytearray(b), bytearray(mlen)
     for i in xrange(mlen):
@@ -27,51 +19,14 @@ _hexencoder = getencoder("hex")
 
 
 def hexdec(data):
-    """Decode hexadecimal
-    """
     return _hexdecoder(data)[0]
 
 
 def hexenc(data):
-    """Encode hexadecimal
-    """
     return _hexencoder(data)[0].decode("ascii")
 
 
-def bytes2long(raw):
-    """ Deserialize big-endian bytes into long number
-
-    :param bytes raw: binary string
-    :returns: deserialized long number
-    :rtype: int
-    """
-    return int(hexenc(raw), 16)
-
-
-def long2bytes(n, size=32):
-    """ Serialize long number into big-endian bytestring
-
-    :param long n: long number
-    :returns: serialized bytestring
-    :rtype: bytes
-    """
-    res = hex(int(n))[2:].rstrip("L")
-    if len(res) % 2 != 0:
-        res = "0" + res
-    s = hexdec(res)
-    if len(s) != size:
-        s = (size - len(s)) * b"\x00" + s
-    return s
-
-
 def modinvert(a, n):
-    """ Modular multiplicative inverse
-
-    :returns: inverse number. -1 if it does not exist
-
-    Realization is taken from:
-    https://en.wikipedia.org/wiki/Extended_Euclidean_algorithm
-    """
     if a < 0:
         return n - modinvert(-a, n)
     t, newt = 0, 1
@@ -85,53 +40,6 @@ def modinvert(a, n):
     if t < 0:
         t = t + n
     return t
-
-
-def add_metaclass(metaclass):
-    """Class decorator for creating a class with a metaclass."""
-
-    def wrapper(cls):
-        orig_vars = cls.__dict__.copy()
-        slots = orig_vars.get("__slots__")
-        if slots is not None:
-            if isinstance(slots, str):
-                slots = [slots]
-            for slots_var in slots:
-                orig_vars.pop(slots_var)
-        orig_vars.pop("__dict__", None)
-        orig_vars.pop("__weakref__", None)
-        return metaclass(cls.__name__, cls.__bases__, orig_vars)
-
-    return wrapper
-
-
-@add_metaclass(ABCMeta)
-class PEP247(object):
-    @property
-    @abstractmethod
-    def digest_size(self):
-        """The size of the digest produced by the hashing objects.
-        """
-
-    @abstractmethod
-    def copy(self):
-        """Return a separate copy of this hashing object.
-        """
-
-    @abstractmethod
-    def update(self, data):
-        """Hash data into the current state of the hashing object.
-        """
-
-    @abstractmethod
-    def digest(self):
-        """Return the hash value as a string containing 8-bit data.
-        """
-
-    def hexdigest(self):
-        """Return the hash value as a string containing hexadecimal digits.
-        """
-        return hexenc(self.digest())
 
 
 BLOCKSIZE = 64
@@ -269,8 +177,6 @@ C = [hexdec("".join(s))[::-1] for s in (
 
 
 def add512bit(a, b):
-    """ Add two 512 integers
-    """
     a = bytearray(a)
     b = bytearray(b)
     cb = 0
@@ -317,40 +223,21 @@ def L(data):
     return b"".join(res)
 
 
-class GOST34112012(PEP247):
-    """ GOST 34.11-2012 big-endian hash
-
-    >>> m = GOST34112012(digest_size=32)
-    >>> m.update("foo")
-    >>> m.update("bar")
-    >>> m.hexdigest()
-    'e3c9fd89226d93b489a9fe27d686806e24a514e3787bca053c698ec4616ceb78'
-    """
+class GOST34112012:
     block_size = BLOCKSIZE
 
     def __init__(self, data, digest_size):
-        """
-        :param digest_size: hash digest size to compute
-        :type digest_size: 32 or 64 bytes
-        """
         self.data = data
         self._digest_size = digest_size
 
-    def copy(self):
-        return GOST34112012(copy(self.data), self.digest_size)
+    def hexdigest(self):
+        return hexenc(self.digest())
 
     @property
     def digest_size(self):
         return self._digest_size
 
-    def update(self, data):
-        """ Append data that has to be hashed
-        """
-        self.data += data
-
     def digest(self):
-        """ Get hash of the provided data
-        """
         hsh = BLOCKSIZE * (b"\x01" if self.digest_size == 32 else b"\x00")
         chk = bytearray(BLOCKSIZE * b"\x00")
         n = 0
