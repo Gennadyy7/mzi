@@ -106,9 +106,9 @@ class McEliece:
     @staticmethod
     def _random_invertible_matrix(k: int) -> np.ndarray:
         while True:
-            M = np.random.randint(0, 2, size=(k, k), dtype=np.uint8)  # в поле GF(2) - Галуа Field порядка 2
+            M = np.random.randint(0, 2, size=(k, k), dtype=np.uint8)
             try:
-                _ = McEliece._inverse_matrix_mod2(M)
+                _ = McEliece._inverse_matrix_mod2(M)  # в поле GF(2) - Галуа Field порядка 2
                 return M
             except ValueError:
                 continue
@@ -149,7 +149,7 @@ class McEliece:
         return M
 
     @staticmethod
-    def _inverse_matrix_mod2(A: np.ndarray) -> np.ndarray:
+    def _inverse_matrix_mod2(A: np.ndarray) -> np.ndarray:  # метод Гаусса–Жордана
         k = A.shape[0]
         M = np.concatenate([A.copy().astype(np.uint8), np.eye(k, dtype=np.uint8)], axis=1)
         row = 0
