@@ -25,7 +25,8 @@ def bits_to_bytes(bits: list[int]) -> bytes:
 
 
 def random_error_vector(n: int, t: int) -> np.ndarray:
-    w = random.randint(0, t)
+    # w = random.randint(0, t)
+    w = t
     pos = random.sample(range(n), w)
     vec = np.zeros(n, dtype=np.uint8)
     for p in pos:
@@ -80,7 +81,7 @@ class Hamming74(LinearCode):
         corrected = (received + err) % 2
         G = self._G
         for candidate in range(1 << self.k):
-            m_bits = np.array([(candidate >> (self.k - 1 - i)) & 1 for i in range(self.k)], dtype=np.uint8)
+            m_bits = np.array([(candidate >> (self.k - 1 - i)) & 1 for i in range(self.k)], dtype=np.uint8)  # Преобразует целое число candidate в двоичный вектор длиной k=4. Например, для candidate = 5 (двоичное 0101) получается массив [0, 1, 0, 1].
             if np.array_equal((m_bits @ G) % 2, corrected):
                 return m_bits, err
         return np.zeros(self.k, dtype=np.uint8), err
