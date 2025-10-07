@@ -1,12 +1,99 @@
+import copy
 from struct import pack, unpack
-from codecs import getdecoder, getencoder
+from codecs import getencoder
 
-_hexdecoder = getdecoder("hex")
+
+def _rol32(x: int, n: int) -> int:
+    return ((x << n) & 0xFFFFFFFF) | (x >> (32 - n))
+
+
+def _to_bytes_be(x: int, length: int) -> bytes:
+    return x.to_bytes(length, 'big')
+
+
+def _from_bytes_be(b: bytes) -> int:
+    return int.from_bytes(b, 'big')
+
+
+# SHA-1
+class SHA1:
+    def __init__(self):
+        self._h = [
+            0x67452301,
+            0xEFCDAB89,
+            0x98BADCFE,
+            0x10325476,
+            0xC3D2E1F0
+        ]
+        self._unprocessed = b''
+        self._message_byte_length = 0
+
+    def update(self, data: bytes):
+        self._message_byte_length += len(data)
+        data = self._unprocessed + data
+        block_size = 64
+        for i in range(0, len(data) // block_size * block_size, block_size):
+            self._process_block(data[i:i + block_size])
+        self._unprocessed = data[len(data) // block_size * block_size:]
+
+    def _process_block(self, block: bytes):
+        assert len(block) == 64
+        w = list(unpack('>16I', block))
+        for t in range(16, 80):
+            val = _rol32(w[t - 3] ^ w[t - 8] ^ w[t - 14] ^ w[t - 16], 1)
+            w.append(val & 0xFFFFFFFF)
+        a, b, c, d, e = self._h
+        for t in range(80):
+            if 0 <= t <= 19:
+                f = (b & c) | ((~b) & d)
+                k = 0x5A827999
+            elif 20 <= t <= 39:
+                f = b ^ c ^ d
+                k = 0x6ED9EBA1
+            elif 40 <= t <= 59:
+                f = (b & c) | (b & d) | (c & d)
+                k = 0x8F1BBCDC
+            else:
+                f = b ^ c ^ d
+                k = 0xCA62C1D6
+            temp = (_rol32(a, 5) + f + e + k + w[t]) & 0xFFFFFFFF
+            e = d
+            d = c
+            c = _rol32(b, 30)
+            b = a
+            a = temp
+        self._h[0] = (self._h[0] + a) & 0xFFFFFFFF
+        self._h[1] = (self._h[1] + b) & 0xFFFFFFFF
+        self._h[2] = (self._h[2] + c) & 0xFFFFFFFF
+        self._h[3] = (self._h[3] + d) & 0xFFFFFFFF
+        self._h[4] = (self._h[4] + e) & 0xFFFFFFFF
+
+    def digest(self) -> bytes:
+        h_copy = copy.deepcopy(self)
+        return h_copy._finalize()
+
+    def _finalize(self) -> bytes:
+
+        message_bit_length = self._message_byte_length * 8
+        unprocessed = self._unprocessed
+
+        unprocessed += b'\x80'
+
+        pad_len = (56 - (len(unprocessed) % 64)) % 64
+        unprocessed += b'\x00' * pad_len
+        unprocessed += pack('>Q', message_bit_length)
+
+        for i in range(0, len(unprocessed), 64):
+            self._process_block(unprocessed[i:i + 64])
+
+        digest = b''.join(pack('>I', h) for h in self._h)
+        return digest
+
+    def hexdigest(self) -> str:
+        return self.digest().hex()
+
+
 _hexencoder = getencoder("hex")
-
-
-def hexdec(data):
-    return _hexdecoder(data)[0]
 
 
 def hexenc(data):
@@ -233,17 +320,6 @@ class GOST34112012:
 
         self._buffer = data
 
-    @property
-    def digest_size(self) -> int:
-        return self._digest_size_bytes
-
-    @property
-    def digest_bits(self) -> int:
-        return self._digest_bits
-
-    def update(self, data: bytes):
-        self._buffer = self._buffer + bytes(data)
-
     def _compute_hash(self, data: bytes) -> bytes:
         hsh = BLOCKSIZE * (b"\x01" if self._digest_size_bytes == 32 else b"\x00")
         chk = bytes(BLOCKSIZE)
@@ -282,6 +358,15 @@ class GOST34112012:
 
 
 if __name__ == "__main__":
+    print("=== SHA-1 tests ===")
+    sha = SHA1()
+    sha.update(b"")
+    print("SHA1(\"\") =", sha.hexdigest())
+    sha2 = SHA1()
+    sha2.update(b"abc")
+    print("SHA1(\"abc\") =", sha2.hexdigest())
+
+    print("=== Streebog tests ===")
     for digest_bits in (256, 512):
         for data in (b'', b'abc'):
-            print(f'{digest_bits=}, {data=}: {GOST34112012(digest_bits=digest_bits, data=data).hexdigest()}')
+            print(f'Streebog({digest_bits=}, {data=}) = {GOST34112012(digest_bits=digest_bits, data=data).hexdigest()}')
