@@ -1,18 +1,5 @@
-from struct import pack
-from struct import unpack
-from codecs import getdecoder
-from codecs import getencoder
-
-xrange = range
-
-
-def strxor(a, b):
-    mlen = min(len(a), len(b))
-    a, b, xor = bytearray(a), bytearray(b), bytearray(mlen)
-    for i in xrange(mlen):
-        xor[i] = a[i] ^ b[i]
-    return bytes(xor)
-
+from struct import pack, unpack
+from codecs import getdecoder, getencoder
 
 _hexdecoder = getdecoder("hex")
 _hexencoder = getencoder("hex")
@@ -26,7 +13,17 @@ def hexenc(data):
     return _hexencoder(data)[0].decode("ascii")
 
 
-def modinvert(a, n):
+def strxor(a: bytes, b: bytes) -> bytes:
+    mlen = min(len(a), len(b))
+    a_bytes = memoryview(a)
+    b_bytes = memoryview(b)
+    out = bytearray(mlen)
+    for i in range(mlen):
+        out[i] = a_bytes[i] ^ b_bytes[i]
+    return bytes(out)
+
+
+def modinvert(a: int, n: int) -> int:
     if a < 0:
         return n - modinvert(-a, n)
     t, newt = 0, 1
@@ -43,6 +40,7 @@ def modinvert(a, n):
 
 
 BLOCKSIZE = 64
+
 Pi = bytearray((
     252, 238, 221, 17, 207, 110, 49, 22, 251, 196, 250,
     218, 35, 197, 4, 77, 233, 119, 240, 219, 147, 46,
@@ -70,7 +68,7 @@ Pi = bytearray((
     75, 99, 182,
 ))
 
-A = [unpack(">Q", hexdec(s))[0] for s in (
+A = [unpack(">Q", bytes.fromhex(s))[0] for s in (
     "8e20faa72ba0b470", "47107ddd9b505a38", "ad08b0e0c3282d1c", "d8045870ef14980e",
     "6c022c38f90a4c07", "3601161cf205268d", "1b8e0b0e798c13c8", "83478b07b2468764",
     "a011d380818e8f40", "5086e740ce47c920", "2843fd2067adea10", "14aff010bdd87508",
@@ -100,7 +98,7 @@ Tau = (
     7, 15, 23, 31, 39, 47, 55, 63,
 )
 
-C = [hexdec("".join(s))[::-1] for s in (
+C = [bytes.fromhex("".join(s))[::-1] for s in (
     (
         "b1085bda1ecadae9ebcb2f81c0657c1f",
         "2f6a76432e45d016714eb88d7585c4fc",
@@ -176,42 +174,27 @@ C = [hexdec("".join(s))[::-1] for s in (
 )]
 
 
-def add512bit(a, b):
-    a = bytearray(a)
-    b = bytearray(b)
+def add512bit(a: bytes, b: bytes) -> bytes:
+    a_arr = bytearray(a)
+    b_arr = bytearray(b)
     cb = 0
     res = bytearray(64)
     for i in range(64):
-        cb = a[i] + b[i] + (cb >> 8)
+        cb = a_arr[i] + b_arr[i] + (cb >> 8)
         res[i] = cb & 0xff
-    return res
+    return bytes(res)
 
 
-def g(n, hsh, msg):
-    res = E(LPS(strxor(hsh[:8], pack("<Q", n)) + hsh[8:]), msg)
-    return strxor(strxor(res, hsh), msg)
-
-
-def E(k, msg):
-    for i in range(12):
-        msg = LPS(strxor(k, msg))
-        k = LPS(strxor(k, C[i]))
-    return strxor(k, msg)
-
-
-def LPS(data):
-    return L(PS(bytearray(data)))
-
-
-def PS(data):
+def PS(data: bytes) -> bytes:
     res = bytearray(BLOCKSIZE)
     for i in range(BLOCKSIZE):
         res[Tau[i]] = Pi[data[i]]
-    return res
+    return bytes(res)
 
 
-def L(data):
-    res = []
+def L(data: bytes) -> bytes:
+    res_parts = []
+
     for i in range(8):
         val = unpack("<Q", data[i * 8:i * 8 + 8])[0]
         res64 = 0
@@ -219,50 +202,86 @@ def L(data):
             if val & 0x8000000000000000:
                 res64 ^= A[j]
             val <<= 1
-        res.append(pack("<Q", res64))
-    return b"".join(res)
+        res_parts.append(pack("<Q", res64))
+    return b"".join(res_parts)
+
+
+def LPS(data: bytes) -> bytes:
+    return L(PS(data))
+
+
+def E(k: bytes, msg: bytes) -> bytes:
+    for i in range(12):
+        msg = LPS(strxor(k, msg))
+        k = LPS(strxor(k, C[i]))
+    return strxor(k, msg)
+
+
+def g(n: int, hsh: bytes, msg: bytes) -> bytes:
+    res = E(LPS(strxor(hsh[:8], pack("<Q", n)) + hsh[8:]), msg)
+    return strxor(strxor(res, hsh), msg)
 
 
 class GOST34112012:
     block_size = BLOCKSIZE
 
-    def __init__(self, data, digest_size):
-        self.data = data
-        self._digest_size = digest_size
+    def __init__(self, digest_bits: int = 256, data: bytes = b""):
+        if digest_bits not in (256, 512):
+            raise ValueError("digest_bits must be 256 or 512")
+        self._digest_bits = digest_bits
+        self._digest_size_bytes = 32 if digest_bits == 256 else 64
 
-    def hexdigest(self):
-        return hexenc(self.digest())
+        self._buffer = data
 
     @property
-    def digest_size(self):
-        return self._digest_size
+    def digest_size(self) -> int:
+        return self._digest_size_bytes
 
-    def digest(self):
-        hsh = BLOCKSIZE * (b"\x01" if self.digest_size == 32 else b"\x00")
-        chk = bytearray(BLOCKSIZE * b"\x00")
+    @property
+    def digest_bits(self) -> int:
+        return self._digest_bits
+
+    def update(self, data: bytes):
+        self._buffer = self._buffer + bytes(data)
+
+    def _compute_hash(self, data: bytes) -> bytes:
+        hsh = BLOCKSIZE * (b"\x01" if self._digest_size_bytes == 32 else b"\x00")
+        chk = bytes(BLOCKSIZE)
         n = 0
-        data = self.data
-        for i in xrange(0, len(data) // BLOCKSIZE * BLOCKSIZE, BLOCKSIZE):
+
+        for i in range(0, len(data) // BLOCKSIZE * BLOCKSIZE, BLOCKSIZE):
             block = data[i:i + BLOCKSIZE]
             hsh = g(n, hsh, block)
             chk = add512bit(chk, block)
             n += 512
 
         padblock_size = len(data) * 8 - n
-        data += b"\x01"
-        padlen = BLOCKSIZE - len(data) % BLOCKSIZE
-        if padlen != BLOCKSIZE:
-            data += b"\x00" * padlen
 
-        hsh = g(n, hsh, data[-BLOCKSIZE:])
+        data_tail = data[len(data) // BLOCKSIZE * BLOCKSIZE:]
+        tail = data_tail + b"\x01"
+        padlen = BLOCKSIZE - len(tail) % BLOCKSIZE
+        if padlen != BLOCKSIZE:
+            tail = tail + (b"\x00" * padlen)
+
+        last_block = tail[-BLOCKSIZE:]
+        hsh = g(n, hsh, last_block)
         n += padblock_size
-        chk = add512bit(chk, data[-BLOCKSIZE:])
+        chk = add512bit(chk, last_block)
+
         hsh = g(0, hsh, pack("<Q", n) + 56 * b"\x00")
         hsh = g(0, hsh, chk)
-        return hsh[-self._digest_size:]
+        return hsh
+
+    def digest(self) -> bytes:
+        full = self._compute_hash(self._buffer)
+
+        return full[-self._digest_size_bytes:]
+
+    def hexdigest(self) -> str:
+        return hexenc(self.digest())
 
 
-print(GOST34112012(data=b'', digest_size=32).hexdigest())
-print(GOST34112012(data=b'', digest_size=64).hexdigest())
-print(GOST34112012(data=b'abc', digest_size=32).hexdigest())
-print(GOST34112012(data=b'abc', digest_size=64).hexdigest())
+if __name__ == "__main__":
+    for digest_bits in (256, 512):
+        for data in (b'', b'abc'):
+            print(f'{digest_bits=}, {data=}: {GOST34112012(digest_bits=digest_bits, data=data).hexdigest()}')
