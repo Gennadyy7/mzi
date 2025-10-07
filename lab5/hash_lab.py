@@ -297,12 +297,6 @@ class Streebog:
         return self._xor512(self._xor512(e, h), m)
 
     def _precompute_C(self):
-        # self._C = []
-        # for i in range(12):
-        #     seed = bytearray(64)
-        #     seed[-1] = i + 1
-        #     const = self._LPS(bytes(seed))
-        #     self._C.append(const)
         self._C = self.C
 
     def update(self, data: bytes):
