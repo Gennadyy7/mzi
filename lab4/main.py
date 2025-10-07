@@ -106,7 +106,7 @@ class McEliece:
     @staticmethod
     def _random_invertible_matrix(k: int) -> np.ndarray:
         while True:
-            M = np.random.randint(0, 2, size=(k, k), dtype=np.uint8)
+            M = np.random.randint(0, 2, size=(k, k), dtype=np.uint8)  # в поле GF(2) - Галуа Field порядка 2
             try:
                 _ = McEliece._inverse_matrix_mod2(M)
                 return M
