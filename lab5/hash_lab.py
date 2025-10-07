@@ -143,6 +143,81 @@ class Streebog:
         0x07e095624504536c, 0x8d70c431ac02a736, 0xc83862965601dd1b, 0x641c314b2b8ee083
     )
 
+    C = [
+        bytes.fromhex(
+            "b1085bda1ecadae9ebcb2f81c0657c1f"
+            "2f6a76432e45d016714eb88d7585c4fc"
+            "4b7ce09192676901a2422a08a460d315"
+            "05767436cc744d23dd806559f2a64507"
+        ),
+        bytes.fromhex(
+            "6fa3b58aa99d2f1a4fe39d460f70b5d7"
+            "f3feea720a232b9861d55e0f16b50131"
+            "9ab5176b12d699585cb561c2db0aa7ca"
+            "55dda21bd7cbcd56e679047021b19bb7"
+        ),
+        bytes.fromhex(
+            "f574dcac2bce2fc70a39fc286a3d8435"
+            "06f15e5f529c1f8bf2ea7514b1297b7b"
+            "d3e20fe490359eb1c1c93a376062db09"
+            "c2b6f443867adb31991e96f50aba0ab2"
+        ),
+        bytes.fromhex(
+            "ef1fdfb3e81566d2f948e1a05d71e4dd"
+            "488e857e335c3c7d9d721cad685e353f"
+            "a9d72c82ed03d675d8b71333935203be"
+            "3453eaa193e837f1220cbebc84e3d12e"
+        ),
+        bytes.fromhex(
+            "4bea6bacad4747999a3f410c6ca92363"
+            "7f151c1f1686104a359e35d7800fffbd"
+            "bfcd1747253af5a3dfff00b723271a16"
+            "7a56a27ea9ea63f5601758fd7c6cfe57"
+        ),
+        bytes.fromhex(
+            "ae4faeae1d3ad3d96fa4c33b7a3039c0"
+            "2d66c4f95142a46c187f9ab49af08ec6"
+            "cffaa6b71c9ab7b40af21f66c2bec6b6"
+            "bf71c57236904f35fa68407a46647d6e"
+        ),
+        bytes.fromhex(
+            "f4c70e16eeaac5ec51ac86febf240954"
+            "399ec6c7e6bf87c9d3473e33197a93c9"
+            "0992abc52d822c3706476983284a0504"
+            "3517454ca23c4af38886564d3a14d493"
+        ),
+        bytes.fromhex(
+            "9b1f5b424d93c9a703e7aa020c6e4141"
+            "4eb7f8719c36de1e89b4443b4ddbc49a"
+            "f4892bcb929b069069d18d2bd1a5c42f"
+            "36acc2355951a8d9a47f0dd4bf02e71e"
+        ),
+        bytes.fromhex(
+            "378f5a541631229b944c9ad8ec165fde"
+            "3a7d3a1b258942243cd955b7e00d0984"
+            "800a440bdbb2ceb17b2b8a9aa6079c54"
+            "0e38dc92cb1f2a607261445183235adb"
+        ),
+        bytes.fromhex(
+            "abbedea680056f52382ae548b2e4f3f3"
+            "8941e71cff8a78db1fffe18a1b336103"
+            "9fe76702af69334b7a1e6c303b7652f4"
+            "3698fad1153bb6c374b4c7fb98459ced"
+        ),
+        bytes.fromhex(
+            "7bcd9ed0efc889fb3002c6cd635afe94"
+            "d8fa6bbbebab07612001802114846679"
+            "8a1d71efea48b9caefbacd1d7d476e98"
+            "dea2594ac06fd85d6bcaa4cd81f32d1b"
+        ),
+        bytes.fromhex(
+            "378ee767f11631bad21380b00449b17a"
+            "cda43c32bcdf1d77f82012d430219f9b"
+            "5d80ef9d1891cc86e71da4aa88e12852"
+            "faf417d5d9b21b9948bc924af11bd720"
+        ),
+    ]
+
     IV_512 = bytes([0] * 64)
     IV_256 = bytes([1] * 64)
 
@@ -189,6 +264,7 @@ class Streebog:
                     for i in range(8):
                         state[56 + i] ^= a_b[i]
             return state
+
         st = bytearray(v)
         for _ in range(8):
             st = R(st)
@@ -213,12 +289,13 @@ class Streebog:
         return self._xor512(self._xor512(e, h), m)
 
     def _precompute_C(self):
-        self._C = []
-        for i in range(12):
-            seed = bytearray(64)
-            seed[-1] = i + 1
-            const = self._LPS(bytes(seed))
-            self._C.append(const)
+        # self._C = []
+        # for i in range(12):
+        #     seed = bytearray(64)
+        #     seed[-1] = i + 1
+        #     const = self._LPS(bytes(seed))
+        #     self._C.append(const)
+        self._C = self.C
 
     def update(self, data: bytes):
         self._message_byte_length += len(data)
