@@ -1,21 +1,11 @@
 import copy
 from struct import pack, unpack
-from codecs import getencoder
 
 
 def _rol32(x: int, n: int) -> int:
     return ((x << n) & 0xFFFFFFFF) | (x >> (32 - n))
 
 
-def _to_bytes_be(x: int, length: int) -> bytes:
-    return x.to_bytes(length, 'big')
-
-
-def _from_bytes_be(b: bytes) -> int:
-    return int.from_bytes(b, 'big')
-
-
-# SHA-1
 class SHA1:
     def __init__(self):
         self._h = [
@@ -91,13 +81,6 @@ class SHA1:
 
     def hexdigest(self) -> str:
         return self.digest().hex()
-
-
-_hexencoder = getencoder("hex")
-
-
-def hexenc(data):
-    return _hexencoder(data)[0].decode("ascii")
 
 
 def strxor(a: bytes, b: bytes) -> bytes:
@@ -354,19 +337,24 @@ class GOST34112012:
         return full[-self._digest_size_bytes:]
 
     def hexdigest(self) -> str:
-        return hexenc(self.digest())
+        return self.digest().hex()
 
 
 if __name__ == "__main__":
     print("=== SHA-1 tests ===")
     sha = SHA1()
     sha.update(b"")
-    print("SHA1(\"\") =", sha.hexdigest())
+    print("SHA1(\"\") =", res1 := sha.hexdigest())
+    assert res1 == 'da39a3ee5e6b4b0d3255bfef95601890afd80709'
     sha2 = SHA1()
     sha2.update(b"abc")
-    print("SHA1(\"abc\") =", sha2.hexdigest())
+    print("SHA1(\"abc\") =", res2 := sha2.hexdigest())
+    assert res2 == 'a9993e364706816aba3e25717850c26c9cd0d89d'
 
     print("=== Streebog tests ===")
     for digest_bits in (256, 512):
         for data in (b'', b'abc'):
             print(f'Streebog({digest_bits=}, {data=}) = {GOST34112012(digest_bits=digest_bits, data=data).hexdigest()}')
+    assert (GOST34112012(digest_bits=512, data=b'test data').hexdigest() ==
+            'ac6ea199422d1cdd07602be57daf13973e147821d690226ea16ff74ad6dd99'
+            'b7804d922299107a79fa89bf97f01d9d406cdb87d37507710a41ba1f0d7d2a224c')
