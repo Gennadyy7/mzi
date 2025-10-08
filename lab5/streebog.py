@@ -255,13 +255,6 @@ def add512bit(a: bytes, b: bytes) -> bytes:
     return bytes(res)
 
 
-def PS(data: bytes) -> bytes:
-    res = bytearray(BLOCKSIZE)
-    for i in range(BLOCKSIZE):
-        res[Tau[i]] = Pi[data[i]]
-    return bytes(res)
-
-
 def L(data: bytes) -> bytes:
     res_parts = []
 
@@ -276,6 +269,18 @@ def L(data: bytes) -> bytes:
     return b"".join(res_parts)
 
 
+def PS(data: bytes) -> bytes:
+    res = bytearray(BLOCKSIZE)
+    for i in range(BLOCKSIZE):
+        res[Tau[i]] = Pi[data[i]]
+    return bytes(res)
+
+
+def g(n: int, hsh: bytes, msg: bytes) -> bytes:
+    res = E(LPS(strxor(hsh[:8], pack("<Q", n)) + hsh[8:]), msg)
+    return strxor(strxor(res, hsh), msg)
+
+
 def LPS(data: bytes) -> bytes:
     return L(PS(data))
 
@@ -285,11 +290,6 @@ def E(k: bytes, msg: bytes) -> bytes:
         msg = LPS(strxor(k, msg))
         k = LPS(strxor(k, C[i]))
     return strxor(k, msg)
-
-
-def g(n: int, hsh: bytes, msg: bytes) -> bytes:
-    res = E(LPS(strxor(hsh[:8], pack("<Q", n)) + hsh[8:]), msg)
-    return strxor(strxor(res, hsh), msg)
 
 
 class GOST34112012:
