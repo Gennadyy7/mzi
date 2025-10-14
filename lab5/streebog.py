@@ -93,22 +93,6 @@ def strxor(a: bytes, b: bytes) -> bytes:
     return bytes(out)
 
 
-def modinvert(a: int, n: int) -> int:
-    if a < 0:
-        return n - modinvert(-a, n)
-    t, newt = 0, 1
-    r, newr = n, a
-    while newr != 0:
-        quotinent = r // newr
-        t, newt = newt, t - quotinent * newt
-        r, newr = newr, r - quotinent * newr
-    if r > 1:
-        return -1
-    if t < 0:
-        t = t + n
-    return t
-
-
 BLOCKSIZE = 64
 
 Pi = bytearray((
