@@ -341,3 +341,46 @@ def xy2uv(curve, x, y):
     u = xmt * modinvert(y, curve.p)
     v = curve.pos(xmt - s) * modinvert(xmt + s, curve.p)
     return u % curve.p, v % curve.p
+
+
+def main():
+    print("=== Лабораторная работа №6: Цифровая подпись по ГОСТ Р 34.10 ===\n")
+
+    curve = CURVES["id-tc26-gost-3410-2012-256-paramSetA"]
+    mode = 2012
+    size = MODE2SIZE[mode]
+
+    text = "Привет, GOST 34.10-2012! This is a test message for digital signature."
+    message = text.encode('utf-8')
+    print(f"Исходное сообщение: {message.decode('utf-8')}")
+
+    import hashlib
+    digest = hashlib.sha256(message).digest()
+    print(f"Хеш сообщения (SHA-256, для демонстрации): {digest.hex()}")
+
+    import os
+    while True:
+        prv_bytes = os.urandom(size)
+        prv = bytes2long(prv_bytes) % curve.q
+        if 0 < prv < curve.q:
+            break
+    print(f"Приватный ключ (в hex): {long2bytes(prv, size).hex()}")
+
+    pub_x, pub_y = public_key(curve, prv)
+    print(f"Публичный ключ X: {long2bytes(pub_x, size).hex()}")
+    print(f"Публичный ключ Y: {long2bytes(pub_y, size).hex()}")
+
+    signature = sign(curve, prv, digest, mode=mode)
+    print(f"Подпись (s || r, {len(signature)} байт): {signature.hex()}")
+
+    is_valid = verify(curve, (pub_x, pub_y), digest, signature, mode=mode)
+    print(f"\nРезультат проверки подписи: {'УСПЕШНО' if is_valid else 'ОШИБКА'}")
+
+    assert is_valid, "Подпись НЕ прошла проверку! Алгоритм работает некорректно."
+    assert len(signature) == 2 * size, f"Неверная длина подписи: ожидалось {2 * size}, получено {len(signature)}"
+
+    print("\n✅ Все тесты пройдены! Реализация ЭЦП по ГОСТ Р 34.10 корректна.")
+
+
+if __name__ == "__main__":
+    main()
