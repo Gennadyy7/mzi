@@ -122,6 +122,7 @@ def sign(curve: GOST3410Curve, prv: int, digest: bytes, rand: Optional[bytes] = 
             rand = None
             continue
         return int_to_bytes(s, size) + int_to_bytes(r, size)
+    raise RuntimeError("Unreachable")
 
 
 def verify(curve: GOST3410Curve, pub: Tuple[int, int], digest: bytes, signature: bytes, mode: int = 2001) -> bool:
