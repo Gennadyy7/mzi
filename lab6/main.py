@@ -1,178 +1,407 @@
-from __future__ import annotations
-from dataclasses import dataclass
-from typing import Optional, Tuple, Dict
-import secrets
+from os import urandom
 
 
-MODE2SIZE = {2001: 32, 2012: 64}
+def hexenc(data: bytes) -> str:
+    return data.hex()
 
 
-def int_from_bytes(b: bytes) -> int:
-    return int.from_bytes(b, byteorder="big")
+def hexdec(data: str) -> bytes:
+    return bytes.fromhex(data)
 
 
-def int_to_bytes(i: int, size: int) -> bytes:
-    return i.to_bytes(length=size, byteorder="big")
+def bytes2long(raw):
+    return int(hexenc(raw), 16)
 
 
-def modinvert(a: int, n: int) -> int:
-    a = a % n
-    if a == 0:
-        raise ValueError("no inverse")
+def long2bytes(n, size=32):
+    res = hex(int(n))[2:].rstrip("L")
+    if len(res) % 2 != 0:
+        res = "0" + res
+    s = hexdec(res)
+    if len(s) != size:
+        s = (size - len(s)) * b"\x00" + s
+    return s
+
+
+def modinvert(a, n):
+    if a < 0:
+        return n - modinvert(-a, n)
     t, newt = 0, 1
     r, newr = n, a
     while newr != 0:
-        q = r // newr
-        t, newt = newt, t - q * newt
-        r, newr = newr, r - q * newr
-    if r != 1:
-        raise ValueError("no inverse")
-    return t % n
+        quotinent = r // newr
+        t, newt = newt, t - quotinent * newt
+        r, newr = newr, r - quotinent * newr
+    if r > 1:
+        return -1
+    if t < 0:
+        t = t + n
+    return t
 
 
-@dataclass
-class GOST3410Curve:
-    p: int
-    q: int
-    a: int
-    b: int
-    x: int
-    y: int
-
-    def point_add(self, p1: Tuple[int, int], p2: Tuple[int, int]) -> Tuple[int, int]:
-        (x1, y1), (x2, y2) = p1, p2
-        if x1 == x2 and y1 == y2:
-            inv = modinvert((2 * y1) % self.p, self.p)
-            lam = ((3 * x1 * x1 + self.a) * inv) % self.p
-        else:
-            inv = modinvert((x2 - x1) % self.p, self.p)
-            lam = ((y2 - y1) * inv) % self.p
-        xr = (lam * lam - x1 - x2) % self.p
-        yr = (lam * (x1 - xr) - y1) % self.p
-        return xr, yr
-
-    def scalar_mul(self, k: int, point: Optional[Tuple[int, int]] = None) -> Tuple[int, int]:
-        if k <= 0:
-            raise ValueError
-        px, py = (self.x, self.y) if point is None else point
-        rx, ry = None, None
-        curx, cury = px, py
-        while k:
-            if k & 1:
-                if rx is None:
-                    rx, ry = curx, cury
-                else:
-                    rx, ry = self.point_add((rx, ry), (curx, cury))
-            k >>= 1
-            if k:
-                curx, cury = self.point_add((curx, cury), (curx, cury))
-        return rx, ry
-
-
-def _h(s: str) -> int:
-    return int(s.replace("\n", "").replace(" ", ""), 16)
-
-
-CURVES: Dict[str, GOST3410Curve] = {
-    "id-GostR3410-2001-CryptoPro-A-ParamSet": GOST3410Curve(
-        p=_h("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFD97"),
-        q=_h("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF6C611070995AD10045841B09B761B893"),
-        a=_h("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFD94"),
-        b=_h("00000000000000000000000000000000000000000000000000000000000000A6"),
-        x=_h("1"),
-        y=_h("8D91E471E0989CDA27DF505A453F2B7635294F2DDF23E3B122ACC99C9E9F1E14"),
-    ),
-    "id-GostR3410-2001-CryptoPro-B-ParamSet": GOST3410Curve(
-        p=_h("8000000000000000000000000000000000000000000000000000000000000C99"),
-        q=_h("800000000000000000000000000000015F700CFFF1A624E5E497161BCC8A198F"),
-        a=_h("8000000000000000000000000000000000000000000000000000000000000C96"),
-        b=_h("3E1AFD2FEE187E9C63995F126D8A1D54C72F046997E8C870998C4FEE9A7F0BEB"),
-        x=_h("1"),
-        y=_h("3FA8124359F966844B5AE1C362F3553D3C1CA2975667C06DBD7A66C0C6A6243A"),
-    ),
+MODE2SIZE = {
+    2001: 32,
+    2012: 64,
 }
 
+
+class GOST3410Curve(object):
+    def __init__(self, p, q, a, b, x, y, e=None, d=None):
+        self.p = p
+        self.q = q
+        self.a = a
+        self.b = b
+        self.x = x
+        self.y = y
+        self.e = e
+        self.d = d
+        r1 = self.y * self.y % self.p
+        r2 = ((self.x * self.x + self.a) * self.x + self.b) % self.p
+        if r1 != self.pos(r2):
+            raise ValueError("Invalid parameters")
+        self._st = None
+
+    def pos(self, v):
+        if v < 0:
+            return v + self.p
+        return v
+
+    def _add(self, p1x, p1y, p2x, p2y):
+        if p1x == p2x and p1y == p2y:
+            t = ((3 * p1x * p1x + self.a) * modinvert(2 * p1y, self.p)) % self.p
+        else:
+            tx = self.pos(p2x - p1x) % self.p
+            ty = self.pos(p2y - p1y) % self.p
+            t = (ty * modinvert(tx, self.p)) % self.p
+        tx = self.pos(t * t - p1x - p2x) % self.p
+        ty = self.pos(t * (p1x - tx) - p1y) % self.p
+        return tx, ty
+
+    def exp(self, degree, x=None, y=None):
+        x = x or self.x
+        y = y or self.y
+        tx = x
+        ty = y
+        if degree == 0:
+            raise ValueError("Bad degree value")
+        degree -= 1
+        while degree != 0:
+            if degree & 1 == 1:
+                tx, ty = self._add(tx, ty, x, y)
+            degree = degree >> 1
+            x, y = self._add(x, y, x, y)
+        return tx, ty
+
+    def st(self):
+        if self.e is None or self.d is None:
+            raise ValueError("non twisted Edwards curve")
+        if self._st is not None:
+            return self._st
+        self._st = (
+            self.pos(self.e - self.d) * modinvert(4, self.p) % self.p,
+            (self.e + self.d) * modinvert(6, self.p) % self.p,
+        )
+        return self._st
+
+
+CURVES = {
+    "GostR3410_2001_ParamSet_cc": GOST3410Curve(
+        p=bytes2long(hexdec("C0000000000000000000000000000000000000000000000000000000000003C7")),
+        q=bytes2long(hexdec("5fffffffffffffffffffffffffffffff606117a2f4bde428b7458a54b6e87b85")),
+        a=bytes2long(hexdec("C0000000000000000000000000000000000000000000000000000000000003c4")),
+        b=bytes2long(hexdec("2d06B4265ebc749ff7d0f1f1f88232e81632e9088fd44b7787d5e407e955080c")),
+        x=bytes2long(hexdec("0000000000000000000000000000000000000000000000000000000000000002")),
+        y=bytes2long(hexdec("a20e034bf8813ef5c18d01105e726a17eb248b264ae9706f440bedc8ccb6b22c")),
+    ),
+    "id-GostR3410-2001-TestParamSet": GOST3410Curve(
+        p=bytes2long(hexdec("8000000000000000000000000000000000000000000000000000000000000431")),
+        q=bytes2long(hexdec("8000000000000000000000000000000150FE8A1892976154C59CFC193ACCF5B3")),
+        a=bytes2long(hexdec("0000000000000000000000000000000000000000000000000000000000000007")),
+        b=bytes2long(hexdec("5FBFF498AA938CE739B8E022FBAFEF40563F6E6A3472FC2A514C0CE9DAE23B7E")),
+        x=bytes2long(hexdec("0000000000000000000000000000000000000000000000000000000000000002")),
+        y=bytes2long(hexdec("08E2A8A0E65147D4BD6316030E16D19C85C97F0A9CA267122B96ABBCEA7E8FC8")),
+    ),
+    "id-GostR3410-2001-CryptoPro-A-ParamSet": GOST3410Curve(
+        p=bytes2long(hexdec("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFD97")),
+        q=bytes2long(hexdec("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF6C611070995AD10045841B09B761B893")),
+        a=bytes2long(hexdec("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFD94")),
+        b=bytes2long(hexdec("00000000000000000000000000000000000000000000000000000000000000a6")),
+        x=bytes2long(hexdec("0000000000000000000000000000000000000000000000000000000000000001")),
+        y=bytes2long(hexdec("8D91E471E0989CDA27DF505A453F2B7635294F2DDF23E3B122ACC99C9E9F1E14")),
+    ),
+    "id-GostR3410-2001-CryptoPro-B-ParamSet": GOST3410Curve(
+        p=bytes2long(hexdec("8000000000000000000000000000000000000000000000000000000000000C99")),
+        q=bytes2long(hexdec("800000000000000000000000000000015F700CFFF1A624E5E497161BCC8A198F")),
+        a=bytes2long(hexdec("8000000000000000000000000000000000000000000000000000000000000C96")),
+        b=bytes2long(hexdec("3E1AF419A269A5F866A7D3C25C3DF80AE979259373FF2B182F49D4CE7E1BBC8B")),
+        x=bytes2long(hexdec("0000000000000000000000000000000000000000000000000000000000000001")),
+        y=bytes2long(hexdec("3FA8124359F96680B83D1C3EB2C070E5C545C9858D03ECFB744BF8D717717EFC")),
+    ),
+    "id-GostR3410-2001-CryptoPro-C-ParamSet": GOST3410Curve(
+        p=bytes2long(hexdec("9B9F605F5A858107AB1EC85E6B41C8AACF846E86789051D37998F7B9022D759B")),
+        q=bytes2long(hexdec("9B9F605F5A858107AB1EC85E6B41C8AA582CA3511EDDFB74F02F3A6598980BB9")),
+        a=bytes2long(hexdec("9B9F605F5A858107AB1EC85E6B41C8AACF846E86789051D37998F7B9022D7598")),
+        b=bytes2long(hexdec("000000000000000000000000000000000000000000000000000000000000805a")),
+        x=bytes2long(hexdec("0000000000000000000000000000000000000000000000000000000000000000")),
+        y=bytes2long(hexdec("41ECE55743711A8C3CBF3783CD08C0EE4D4DC440D4641A8F366E550DFDB3BB67")),
+    ),
+    "id-tc26-gost-3410-2012-256-paramSetA": GOST3410Curve(
+        p=bytes2long(hexdec("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFD97")),
+        q=bytes2long(hexdec("400000000000000000000000000000000FD8CDDFC87B6635C115AF556C360C67")),
+        a=bytes2long(hexdec("C2173F1513981673AF4892C23035A27CE25E2013BF95AA33B22C656F277E7335")),
+        b=bytes2long(hexdec("295F9BAE7428ED9CCC20E7C359A9D41A22FCCD9108E17BF7BA9337A6F8AE9513")),
+        x=bytes2long(hexdec("91E38443A5E82C0D880923425712B2BB658B9196932E02C78B2582FE742DAA28")),
+        y=bytes2long(hexdec("32879423AB1A0375895786C4BB46E9565FDE0B5344766740AF268ADB32322E5C")),
+        e=0x01,
+        d=bytes2long(hexdec("0605F6B7C183FA81578BC39CFAD518132B9DF62897009AF7E522C32D6DC7BFFB")),
+    ),
+    "id-tc26-gost-3410-2012-512-paramSetTest": GOST3410Curve(
+        p=bytes2long(hexdec(
+            "4531ACD1FE0023C7550D267B6B2FEE80922B14B2FFB90F04D4EB7C09B5D2D15DF1D852741AF4704A"
+            "0458047E80E4546D35B8336FAC224DD81664BBF528BE6373")),
+        q=bytes2long(hexdec(
+            "4531ACD1FE0023C7550D267B6B2FEE80922B14B2FFB90F04D4EB7C09B5D2D15DA82F2D7ECB1DBAC71"
+            "9905C5EECC423F1D86E25EDBE23C595D644AAF187E6E6DF")),
+        a=7,
+        b=bytes2long(hexdec(
+            "1CFF0806A31116DA29D8CFA54E57EB748BC5F377E49400FDD788B649ECA1AC4361834013B2AD73224"
+            "80A89CA58E0CF74BC9E540C2ADD6897FAD0A3084F302ADC")),
+        x=bytes2long(hexdec(
+            "24D19CC64572EE30F396BF6EBBFD7A6C5213B3B3D7057CC825F91093A68CD762FD60611262CD838DC"
+            "6B60AA7EEE804E28BC849977FAC33B4B530F1B120248A9A")),
+        y=bytes2long(hexdec(
+            "2BB312A43BD2CE6E0D020613C857ACDDCFBF061E91E5F2C3F32447C259F39B2C83AB156D77F1496BF"
+            "7EB3351E1EE4E43DC1A18B91B24640B6DBB92CB1ADD371E")),
+    ),
+    "id-tc26-gost-3410-12-512-paramSetA": GOST3410Curve(
+        p=bytes2long(hexdec(
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFDC7")),
+        q=bytes2long(hexdec(
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF27E69532F48D89116F"
+            "F22B8D4E0560609B4B38ABFAD2B85DCACDB1411F10B275")),
+        a=bytes2long(hexdec(
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFDC4")),
+        b=bytes2long(hexdec(
+            "E8C2505DEDFC86DDC1BD0B2B6667F1DA34B82574761CB0E879BD081CFD0B6265EE3CB090F30D27614C"
+            "B4574010DA90DD862EF9D4EBEE4761503190785A71C760")),
+        x=bytes2long(hexdec(
+            "0000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+            "0000000000000000000000000000000000000000000003")),
+        y=bytes2long(hexdec(
+            "7503CFE87A836AE3A61B8816E25450E6CE5E1C93ACF1ABC1778064FDCBEFA921DF1626BE4FD036E93D"
+            "75E6A50E3A41E98028FE5FC235F5B889A589CB5215F2A4")),
+    ),
+    "id-tc26-gost-3410-12-512-paramSetB": GOST3410Curve(
+        p=bytes2long(hexdec(
+            "8000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+            "000000000000000000000000000000000000000000006F")),
+        q=bytes2long(hexdec(
+            "800000000000000000000000000000000000000000000000000000000000000149A1EC142565A545A"
+            "CFDB77BD9D40CFA8B996712101BEA0EC6346C54374F25BD")),
+        a=bytes2long(hexdec(
+            "8000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+            "000000000000000000000000000000000000000000006C")),
+        b=bytes2long(hexdec(
+            "687D1B459DC841457E3E06CF6F5E2517B97C7D614AF138BCBF85DC806C4B289F3E965D2DB1416D217"
+            "F8B276FAD1AB69C50F78BEE1FA3106EFB8CCBC7C5140116")),
+        x=bytes2long(hexdec(
+            "000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+            "00000000000000000000000000000000000000000000002")),
+        y=bytes2long(hexdec(
+            "1A8F7EDA389B094C2C071E3647A8940F3C123B697578C213BE6DD9E6C8EC7335DCB228FD1EDF4A391"
+            "52CBCAAF8C0398828041055F94CEEEC7E21340780FE41BD")),
+    ),
+    "id-tc26-gost-3410-2012-512-paramSetC": GOST3410Curve(
+        p=bytes2long(hexdec(
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"
+            "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFDC7")),
+        q=bytes2long(hexdec(
+            "3FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFC98CDBA46506AB004C"
+            "33A9FF5147502CC8EDA9E7A769A12694623CEF47F023ED")),
+        a=bytes2long(hexdec(
+            "DC9203E514A721875485A529D2C722FB187BC8980EB866644DE41C68E143064546E861C0E2C9EDD92A"
+            "DE71F46FCF50FF2AD97F951FDA9F2A2EB6546F39689BD3")),
+        b=bytes2long(hexdec(
+            "B4C4EE28CEBC6C2C8AC12952CF37F16AC7EFB6A9F69F4B57FFDA2E4F0DE5ADE038CBC2FFF719D2C18D"
+            "E0284B8BFEF3B52B8CC7A5F5BF0A3C8D2319A5312557E1")),
+        x=bytes2long(hexdec(
+            "E2E31EDFC23DE7BDEBE241CE593EF5DE2295B7A9CBAEF021D385F7074CEA043AA27272A7AE602BF2A7"
+            "B9033DB9ED3610C6FB85487EAE97AAC5BC7928C1950148")),
+        y=bytes2long(hexdec(
+            "F5CE40D95B5EB899ABBCCFF5911CB8577939804D6527378B8C108C3D2090FF9BE18E2D33E3021ED2EF"
+            "32D85822423B6304F726AA854BAE07D0396E9A9ADDC40F")),
+        e=0x01,
+        d=bytes2long(hexdec(
+            "9E4F5D8C017D8D9F13A5CF3CDF5BFE4DAB402D54198E31EBDE28A0621050439CA6B39E0A515C06B304E"
+            "2CE43E79E369E91A0CFC2BC2A22B4CA302DBB33EE7550")),
+    ),
+}
+CURVES["id-GostR3410-2001-CryptoPro-XchA-ParamSet"] = CURVES["id-GostR3410-2001-CryptoPro-A-ParamSet"]
+CURVES["id-GostR3410-2001-CryptoPro-XchB-ParamSet"] = CURVES["id-GostR3410-2001-CryptoPro-C-ParamSet"]
+CURVES["id-tc26-gost-3410-2012-256-paramSetB"] = CURVES["id-GostR3410-2001-CryptoPro-A-ParamSet"]
+CURVES["id-tc26-gost-3410-2012-256-paramSetC"] = CURVES["id-GostR3410-2001-CryptoPro-B-ParamSet"]
+CURVES["id-tc26-gost-3410-2012-256-paramSetD"] = CURVES["id-GostR3410-2001-CryptoPro-C-ParamSet"]
 DEFAULT_CURVE = CURVES["id-GostR3410-2001-CryptoPro-A-ParamSet"]
 
 
-def public_key(curve: GOST3410Curve, prv: int) -> Tuple[int, int]:
-    return curve.scalar_mul(prv)
+def public_key(curve, prv):
+    return curve.exp(prv)
 
 
-def sign(curve: GOST3410Curve, prv: int, digest: bytes, rand: Optional[bytes] = None, mode: int = 2001) -> bytes:
+def sign(curve, prv, digest, rand=None, mode=2001):
     size = MODE2SIZE[mode]
     q = curve.q
-    e = int_from_bytes(digest) % q
+    e = bytes2long(digest) % q
     if e == 0:
         e = 1
+    s = r = None
     while True:
         if rand is None:
-            rand = secrets.token_bytes(size)
-        k = int_from_bytes(rand) % q
+            rand = urandom(size)
+        elif len(rand) != size:
+            raise ValueError("rand length != %d" % size)
+        k = bytes2long(rand) % q
         if k == 0:
-            rand = None
             continue
-        r_x, _ = curve.scalar_mul(k)
-        r = r_x % q
+        r, _ = curve.exp(k)
+        r %= q
         if r == 0:
-            rand = None
             continue
-        s = (prv * r + k * e) % q
+        d = prv * r
+        k *= e
+        s = (d + k) % q
         if s == 0:
-            rand = None
             continue
-        return int_to_bytes(s, size) + int_to_bytes(r, size)
-    raise RuntimeError("Unreachable")
+        break
+    return long2bytes(s, size) + long2bytes(r, size)
 
 
-def verify(curve: GOST3410Curve, pub: Tuple[int, int], digest: bytes, signature: bytes, mode: int = 2001) -> bool:
+def verify(curve, pub, digest, signature, mode=2001):
     size = MODE2SIZE[mode]
     if len(signature) != size * 2:
-        return False
+        raise ValueError("Invalid signature length")
     q = curve.q
     p = curve.p
-    s = int_from_bytes(signature[:size])
-    r = int_from_bytes(signature[size:])
-    if not (0 < r < q and 0 < s < q):
+    s = bytes2long(signature[:size])
+    r = bytes2long(signature[size:])
+    if r <= 0 or r >= q or s <= 0 or s >= q:
         return False
-    e = int_from_bytes(digest) % q
+    e = bytes2long(digest) % curve.q
     if e == 0:
         e = 1
-    try:
-        v = modinvert(e, q)
-    except ValueError:
-        return False
-    z1 = (s * v) % q
-    z2 = (q - (r * v) % q) % q
-    p1x, p1y = curve.scalar_mul(z1)
-    q1x, q1y = curve.scalar_mul(z2, point=pub)
-    denom = (q1x - p1x) % p
-    try:
-        inv_denom = modinvert(denom, p)
-    except ValueError:
-        return False
-    num = (q1y - p1y) % p
-    lm = (inv_denom * num) % p
-    lm = (lm * lm - p1x - q1x) % p
-    lm = lm % q
+    v = modinvert(e, q)
+    z1 = s * v % q
+    z2 = q - r * v % q
+    p1x, p1y = curve.exp(z1)
+    q1x, q1y = curve.exp(z2, pub[0], pub[1])
+    lm = q1x - p1x
+    if lm < 0:
+        lm += p
+    lm = modinvert(lm, p)
+    z1 = q1y - p1y
+    lm = lm * z1 % p
+    lm = lm * lm % p
+    lm = lm - p1x - q1x
+    lm = lm % p
+    if lm < 0:
+        lm += p
+    lm %= q
     return lm == r
 
 
-def main():
+def prv_unmarshal(prv):
+    return bytes2long(prv[::-1])
+
+
+def pub_marshal(pub, mode=2001):
+    size = MODE2SIZE[mode]
+    return (long2bytes(pub[1], size) + long2bytes(pub[0], size))[::-1]
+
+
+def pub_unmarshal(pub, mode=2001):
+    size = MODE2SIZE[mode]
+    pub = pub[::-1]
+    return bytes2long(pub[size:]), bytes2long(pub[:size])
+
+
+def uv2xy(curve, u, v):
+    s, t = curve.st()
+    k1 = (s * (1 + v)) % curve.p
+    k2 = curve.pos(1 - v)
+    x = t + k1 * modinvert(k2, curve.p)
+    y = k1 * modinvert(u * k2, curve.p)
+    return x % curve.p, y % curve.p
+
+
+def xy2uv(curve, x, y):
+    s, t = curve.st()
+    xmt = curve.pos(x - t)
+    u = xmt * modinvert(y, curve.p)
+    v = curve.pos(xmt - s) * modinvert(xmt + s, curve.p)
+    return u % curve.p, v % curve.p
+
+
+def run_mode(curve_name: str, mode: int, message: bytes):
+    """
+    Выполнить демонстрацию: генерация ключа, подпись, проверка для одной пары (curve, mode).
+    """
+    print(f"\n=== Демонстрация: mode={mode}, curve={curve_name} ===")
+    curve = CURVES[curve_name]
+    size = MODE2SIZE[mode]
+
     import hashlib
-    text = "Привет, GOST 34.10-2012! This is a test message for digital signature."
-    msg = text.encode('utf-8')
-    digest = hashlib.sha256(msg).digest()
-    curve = DEFAULT_CURVE
-    prv = int_from_bytes(secrets.token_bytes(32)) % curve.q
-    pub = public_key(curve, prv)
-    sig = sign(curve, prv, digest)
-    ok = verify(curve, pub, digest, sig)
-    print("Message:", msg)
-    print("Private key:", hex(prv))
-    print("Public key:", (hex(pub[0]), hex(pub[1])))
-    print("Signature:", sig.hex())
-    print("Valid:", ok)
+    # Для демонстрации используем SHA-256 (достаточно для показа механики).
+    digest = hashlib.sha256(message).digest()
+    print(f"Хеш сообщения (SHA-256): {digest.hex()}")
+
+    # Генерация случайного приватного ключа в диапазоне (0, q)
+    from os import urandom
+    while True:
+        prv_bytes = urandom(size)
+        prv = bytes2long(prv_bytes) % curve.q
+        if 0 < prv < curve.q:
+            break
+
+    print(f"Приватный ключ (hex, {size} байт): {long2bytes(prv, size).hex()}")
+
+    # Публичный ключ
+    pub_x, pub_y = public_key(curve, prv)
+    print(f"Публичный ключ X: {long2bytes(pub_x, size).hex()}")
+    print(f"Публичный ключ Y: {long2bytes(pub_y, size).hex()}")
+
+    # Подпись
+    sig = sign(curve, prv, digest, mode=mode)
+    print(f"Подпись (s||r, {len(sig)} байт): {sig.hex()}")
+
+    # Проверка
+    ok = verify(curve, (pub_x, pub_y), digest, sig, mode=mode)
+    print(f"Результат проверки подписи: {'УСПЕШНО' if ok else 'ОШИБКА'}")
+    assert ok, f"Подпись не прошла проверку для mode={mode}, curve={curve_name}"
+    assert len(sig) == 2 * size, f"Ожидалось {2*size} байт подписи, получено {len(sig)}"
+
+
+def main():
+    message_text = "Привет, GOST 34.10! Демонстрация двух режимов."
+    message = message_text.encode('utf-8')
+    print("=== Лабораторная работа №6: Демонстрация ГОСТ Р 34.10 (две конфигурации) ===")
+    print(f"Исходное сообщение: {message_text!r}")
+
+    # Пары (curve_name, mode) для демонстрации
+    demo_list = [
+        ("id-GostR3410-2001-CryptoPro-A-ParamSet", 2001),
+        ("id-tc26-gost-3410-12-512-paramSetA", 2012),
+    ]
+
+    for curve_name, mode in demo_list:
+        try:
+            run_mode(curve_name, mode, message)
+        except Exception as exc:
+            print(f"\nОшибка при выполнении mode={mode}, curve={curve_name}: {exc}")
+            raise
+
+    print("\n✅ Демонстрация завершена — оба режима успешно выполнены.")
 
 
 if __name__ == "__main__":
