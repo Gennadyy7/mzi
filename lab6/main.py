@@ -92,17 +92,6 @@ class GOST3410Curve(object):
             x, y = self._add(x, y, x, y)
         return tx, ty
 
-    def st(self):
-        if self.e is None or self.d is None:
-            raise ValueError("non twisted Edwards curve")
-        if self._st is not None:
-            return self._st
-        self._st = (
-            self.pos(self.e - self.d) * modinvert(4, self.p) % self.p,
-            (self.e + self.d) * modinvert(6, self.p) % self.p,
-        )
-        return self._st
-
 
 CURVES = {
     "GostR3410_2001_ParamSet_cc": GOST3410Curve(
@@ -311,38 +300,6 @@ def verify(curve, pub, digest, signature, mode=2001):
     return lm == r
 
 
-def prv_unmarshal(prv):
-    return bytes2long(prv[::-1])
-
-
-def pub_marshal(pub, mode=2001):
-    size = MODE2SIZE[mode]
-    return (long2bytes(pub[1], size) + long2bytes(pub[0], size))[::-1]
-
-
-def pub_unmarshal(pub, mode=2001):
-    size = MODE2SIZE[mode]
-    pub = pub[::-1]
-    return bytes2long(pub[size:]), bytes2long(pub[:size])
-
-
-def uv2xy(curve, u, v):
-    s, t = curve.st()
-    k1 = (s * (1 + v)) % curve.p
-    k2 = curve.pos(1 - v)
-    x = t + k1 * modinvert(k2, curve.p)
-    y = k1 * modinvert(u * k2, curve.p)
-    return x % curve.p, y % curve.p
-
-
-def xy2uv(curve, x, y):
-    s, t = curve.st()
-    xmt = curve.pos(x - t)
-    u = xmt * modinvert(y, curve.p)
-    v = curve.pos(xmt - s) * modinvert(xmt + s, curve.p)
-    return u % curve.p, v % curve.p
-
-
 def run_mode(curve_name: str, mode: int, message: bytes):
     print(f"\n=== Демонстрация: mode={mode}, curve={curve_name} ===")
     curve = CURVES[curve_name]
@@ -371,7 +328,7 @@ def run_mode(curve_name: str, mode: int, message: bytes):
     ok = verify(curve, (pub_x, pub_y), digest, sig, mode=mode)
     print(f"Результат проверки подписи: {'УСПЕШНО' if ok else 'ОШИБКА'}")
     assert ok, f"Подпись не прошла проверку для mode={mode}, curve={curve_name}"
-    assert len(sig) == 2 * size, f"Ожидалось {2*size} байт подписи, получено {len(sig)}"
+    assert len(sig) == 2 * size, f"Ожидалось {2 * size} байт подписи, получено {len(sig)}"
 
 
 def main():
