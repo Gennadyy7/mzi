@@ -344,19 +344,14 @@ def xy2uv(curve, x, y):
 
 
 def run_mode(curve_name: str, mode: int, message: bytes):
-    """
-    Выполнить демонстрацию: генерация ключа, подпись, проверка для одной пары (curve, mode).
-    """
     print(f"\n=== Демонстрация: mode={mode}, curve={curve_name} ===")
     curve = CURVES[curve_name]
     size = MODE2SIZE[mode]
 
     import hashlib
-    # Для демонстрации используем SHA-256 (достаточно для показа механики).
     digest = hashlib.sha256(message).digest()
     print(f"Хеш сообщения (SHA-256): {digest.hex()}")
 
-    # Генерация случайного приватного ключа в диапазоне (0, q)
     from os import urandom
     while True:
         prv_bytes = urandom(size)
@@ -366,16 +361,13 @@ def run_mode(curve_name: str, mode: int, message: bytes):
 
     print(f"Приватный ключ (hex, {size} байт): {long2bytes(prv, size).hex()}")
 
-    # Публичный ключ
     pub_x, pub_y = public_key(curve, prv)
     print(f"Публичный ключ X: {long2bytes(pub_x, size).hex()}")
     print(f"Публичный ключ Y: {long2bytes(pub_y, size).hex()}")
 
-    # Подпись
     sig = sign(curve, prv, digest, mode=mode)
     print(f"Подпись (s||r, {len(sig)} байт): {sig.hex()}")
 
-    # Проверка
     ok = verify(curve, (pub_x, pub_y), digest, sig, mode=mode)
     print(f"Результат проверки подписи: {'УСПЕШНО' if ok else 'ОШИБКА'}")
     assert ok, f"Подпись не прошла проверку для mode={mode}, curve={curve_name}"
@@ -388,7 +380,6 @@ def main():
     print("=== Лабораторная работа №6: Демонстрация ГОСТ Р 34.10 (две конфигурации) ===")
     print(f"Исходное сообщение: {message_text!r}")
 
-    # Пары (curve_name, mode) для демонстрации
     demo_list = [
         ("id-GostR3410-2001-CryptoPro-A-ParamSet", 2001),
         ("id-tc26-gost-3410-12-512-paramSetA", 2012),
