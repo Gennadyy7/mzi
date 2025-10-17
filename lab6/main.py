@@ -92,17 +92,6 @@ class GOST3410Curve(object):
             x, y = self._add(x, y, x, y)
         return tx, ty
 
-    def st(self):
-        if self.e is None or self.d is None:
-            raise ValueError("non twisted Edwards curve")
-        if self._st is not None:
-            return self._st
-        self._st = (
-            self.pos(self.e - self.d) * modinvert(4, self.p) % self.p,
-            (self.e + self.d) * modinvert(6, self.p) % self.p,
-        )
-        return self._st
-
 
 CURVES = {
     "GostR3410_2001_ParamSet_cc": GOST3410Curve(
@@ -309,38 +298,6 @@ def verify(curve, pub, digest, signature, mode=2001):
         lm += p
     lm %= q
     return lm == r
-
-
-def prv_unmarshal(prv):
-    return bytes2long(prv[::-1])
-
-
-def pub_marshal(pub, mode=2001):
-    size = MODE2SIZE[mode]
-    return (long2bytes(pub[1], size) + long2bytes(pub[0], size))[::-1]
-
-
-def pub_unmarshal(pub, mode=2001):
-    size = MODE2SIZE[mode]
-    pub = pub[::-1]
-    return bytes2long(pub[size:]), bytes2long(pub[:size])
-
-
-def uv2xy(curve, u, v):
-    s, t = curve.st()
-    k1 = (s * (1 + v)) % curve.p
-    k2 = curve.pos(1 - v)
-    x = t + k1 * modinvert(k2, curve.p)
-    y = k1 * modinvert(u * k2, curve.p)
-    return x % curve.p, y % curve.p
-
-
-def xy2uv(curve, x, y):
-    s, t = curve.st()
-    xmt = curve.pos(x - t)
-    u = xmt * modinvert(y, curve.p)
-    v = curve.pos(xmt - s) * modinvert(xmt + s, curve.p)
-    return u % curve.p, v % curve.p
 
 
 def main():
