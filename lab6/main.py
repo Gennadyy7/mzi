@@ -18,15 +18,13 @@ def modinv(a: int, m: int) -> int:
 
 
 class GOST3410Curve:
-    def __init__(self, p, q, a, b, x, y, e=None, d=None):
-        self.p = p
-        self.q = q
+    def __init__(self, p, q, a, b, x, y):
+        self.p = p  # модуль конечного поля
+        self.q = q  # порядок подгруппы (простое число)
         self.a = a % p
-        self.b = b % p
+        self.b = b % p  # коэффициенты уравнения Вейерштрасса y2≡x3+ax+b(mod p)
         self.x = x % p
-        self.y = y % p
-        self.e = e
-        self.d = d
+        self.y = y % p  # координаты базовой точки G
         lhs = (self.y * self.y) % self.p
         rhs = ((self.x * self.x + self.a) * self.x + self.b) % self.p
         if lhs != rhs:
