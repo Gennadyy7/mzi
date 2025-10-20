@@ -30,14 +30,6 @@ class GOST3410Curve:
         if lhs != rhs:
             raise ValueError("Invalid parameters")
 
-    @staticmethod
-    def is_inf(P):
-        return P is None
-
-    def neg(self, P):
-        x, y = P
-        return x, (-y) % self.p
-
     def add(self, P, Q):
         if P is None:
             return Q
