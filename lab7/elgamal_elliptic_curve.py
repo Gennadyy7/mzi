@@ -1,5 +1,10 @@
 from __future__ import annotations
+
+import os
 import random
+
+from lab2.main import BelCipher, CFBMode
+from lab5.streebog import GOST34112012
 
 
 class FieldElement:
@@ -191,32 +196,86 @@ class EC_ElGamal:
             candidate = candidate + self.curve.G
         return None
 
+    def encrypt_session_key(self, session_key_scalar: int, public_key: Point) -> tuple[Point, Point]:
+        return self.encrypt(session_key_scalar, public_key)
 
-if __name__ == "__main__":
-    p = 751
-    a = -1
-    b = 188
-    Gx, Gy = 0, 376
-    n = 727
+    def decrypt_session_key_scalar(self, private_key: int, ciphertext: tuple[Point, Point]) -> int:
+        Pm = self.decrypt(private_key, ciphertext)
+        return self.recover_scalar_from_point(Pm)
 
-    curve = EllipticCurve(p=p, a=a, b=b, Gx=Gx, Gy=Gy, n=n)
+
+def derive_key(scalar: int) -> bytes:
+    data = str(scalar).encode()
+    hasher = GOST34112012(digest_bits=256, data=data)
+    return hasher.digest()
+
+
+def hybrid_encrypt_file(input_path: str, output_path: str, public_key: Point, curve: EllipticCurve):
     ecc = EC_ElGamal(curve)
 
-    d, Q = ecc.generate_keypair()
-    print(f"Private key: {d}")
-    print(f"Public key: {Q}")
+    k = curve.random_scalar()
 
-    m = 123
-    print(f"\nOriginal message scalar: {m}")
+    session_key = derive_key(k)
 
-    C1, C2 = ecc.encrypt(m, Q)
-    print(f"Ciphertext: C1={C1}, C2={C2}")
+    iv = os.urandom(16)
 
-    Pm = ecc.decrypt(d, (C1, C2))
-    print(f"Decrypted point: {Pm}")
+    cipher = BelCipher(session_key)
+    cfb = CFBMode(cipher)
+    cfb.encrypt_file(input_path, "temp_enc.bin", iv)
 
-    m_recovered = ecc.recover_scalar_from_point(Pm)
-    print(f"Recovered message scalar: {m_recovered}")
+    C1, C2 = ecc.encrypt(k, public_key)
 
-    assert m == m_recovered, "Decryption failed!"
-    print("\n✅ EC-ElGamal test passed.")
+    with open(output_path, "wb") as f:
+        f.write(C1.x.value.to_bytes(2, 'big'))
+        f.write(C1.y.value.to_bytes(2, 'big'))
+        f.write(C2.x.value.to_bytes(2, 'big'))
+        f.write(C2.y.value.to_bytes(2, 'big'))
+        f.write(iv)
+        with open("temp_enc.bin", "rb") as enc_f:
+            f.write(enc_f.read())
+
+    os.remove("temp_enc.bin")
+
+
+def hybrid_decrypt_file(input_path: str, output_path: str, private_key: int, curve: EllipticCurve):
+    ecc = EC_ElGamal(curve)
+
+    with open(input_path, "rb") as f:
+        C1x = int.from_bytes(f.read(2), 'big')
+        C1y = int.from_bytes(f.read(2), 'big')
+        C2x = int.from_bytes(f.read(2), 'big')
+        C2y = int.from_bytes(f.read(2), 'big')
+        iv = f.read(16)
+        encrypted_data = f.read()
+
+    C1 = Point(FieldElement(C1x, curve.p), FieldElement(C1y, curve.p), curve)
+    C2 = Point(FieldElement(C2x, curve.p), FieldElement(C2y, curve.p), curve)
+
+    k = ecc.decrypt_session_key_scalar(private_key, (C1, C2))
+    if k is None:
+        raise ValueError("Failed to recover session key scalar")
+
+    session_key = derive_key(k)
+
+    with open("temp_dec.bin", "wb") as f:
+        f.write(encrypted_data)
+
+    cipher = BelCipher(session_key)
+    cfb = CFBMode(cipher)
+    cfb.decrypt_file("temp_dec.bin", output_path, iv)
+
+    os.remove("temp_dec.bin")
+
+
+if __name__ == "__main__":
+    p, a, b, Gx, Gy, n = 751, -1, 188, 0, 376, 727
+    curve = EllipticCurve(p, a, b, Gx, Gy, n)
+    ecc = EC_ElGamal(curve)
+    private_key, public_key = ecc.generate_keypair()
+    with open("test.txt", "w") as f:
+        f.write("Секретное сообщение для лабораторной по защите информации!")
+    hybrid_encrypt_file("test.txt", "test.hybrid", public_key, curve)
+    hybrid_decrypt_file("test.hybrid", "test_decrypted.txt", private_key, curve)
+    with open("test.txt", "r") as f1, open("test_decrypted.txt", "r") as f2:
+        assert f1.read() == f2.read()
+    print("✅ Гибридная схема работает!")

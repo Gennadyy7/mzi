@@ -1,6 +1,6 @@
-from os import urandom
-import secrets
 import hashlib
+import secrets
+from os import urandom
 
 MODE2SIZE = {2001: 32, 2012: 64}
 

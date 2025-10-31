@@ -1,6 +1,7 @@
-import numpy as np
 import random
 from dataclasses import dataclass
+
+import numpy as np
 
 
 def bytes_to_bits(data: bytes) -> list[int]:
