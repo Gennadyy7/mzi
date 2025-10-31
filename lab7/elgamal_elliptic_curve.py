@@ -232,6 +232,7 @@ def hybrid_encrypt_file(input_path: str, output_path: str, public_key: Point, cu
             f.write(enc_f.read())
 
     os.remove("temp_enc.bin")
+    return session_key, iv
 
 
 def hybrid_decrypt_file(input_path: str, output_path: str, private_key: int, curve: EllipticCurve):
@@ -269,10 +270,25 @@ if __name__ == "__main__":
     curve = EllipticCurve(p, a, b, Gx, Gy, n)
     ecc = EC_ElGamal(curve)
     private_key, public_key = ecc.generate_keypair()
-    with open("test.txt", "w") as f:
-        f.write("Секретное сообщение для лабораторной по защите информации!")
-    hybrid_encrypt_file("test.txt", "test.hybrid", public_key, curve)
+
+    original_message = "Секретное сообщение для лабораторной по защите информации!"
+    with open("test.txt", "w", encoding="utf-8") as f:
+        f.write(original_message)
+
+    print(f"Исходное сообщение: \"{original_message}\"")
+    print(f"Закрытый ключ: {private_key}")
+    print(f"Открытый ключ: {public_key}")
+
+    session_key, iv = hybrid_encrypt_file("test.txt", "test.hybrid", public_key, curve)
+    print(f"Сессионный ключ: {session_key.hex()}")
+    print(f"IV: {iv.hex()}")
+
     hybrid_decrypt_file("test.hybrid", "test_decrypted.txt", private_key, curve)
-    with open("test.txt", "r") as f1, open("test_decrypted.txt", "r") as f2:
-        assert f1.read() == f2.read()
-    print("✅ Гибридная схема работает!")
+
+    with open("test.txt", "r", encoding="utf-8") as f1, open("test_decrypted.txt", "r", encoding="utf-8") as f2:
+        result = f1.read() == f2.read()
+    print(f"Результат сравнения: {result}")
+    if result:
+        print("✅ Гибридная схема работает!")
+    else:
+        print("❌ Ошибка при дешифровании!")
