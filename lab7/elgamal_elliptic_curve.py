@@ -266,6 +266,7 @@ def hybrid_decrypt_file(input_path: str, output_path: str, private_key: int, cur
 
 
 if __name__ == "__main__":
+    # Источник: https://www.researchgate.net/publication/379071251_An_Optimized_Point_Multiplication_Strategy_in_Elliptic_Curve_Cryptography_for_Resource-Constrained_Devices
     p, a, b, Gx, Gy, n = 751, -1, 188, 0, 376, 727
     curve = EllipticCurve(p, a, b, Gx, Gy, n)
     ecc = EC_ElGamal(curve)
