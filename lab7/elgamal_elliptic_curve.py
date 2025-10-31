@@ -196,9 +196,6 @@ class EC_ElGamal:
             candidate = candidate + self.curve.G
         return None
 
-    def encrypt_session_key(self, session_key_scalar: int, public_key: Point) -> tuple[Point, Point]:
-        return self.encrypt(session_key_scalar, public_key)
-
     def decrypt_session_key_scalar(self, private_key: int, ciphertext: tuple[Point, Point]) -> int:
         Pm = self.decrypt(private_key, ciphertext)
         return self.recover_scalar_from_point(Pm)
