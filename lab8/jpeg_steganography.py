@@ -116,7 +116,10 @@ def main() -> None:
         print(f"Файл {cover_path} не найден. Помести JPEG рядом с программой.")
         return
 
-    message = "Привет, это реальное сообщение, спрятанное в фотографии!"
+    message = (
+            "Привет, это реальное сообщение, спрятанное в фотографии!"
+            # * 18**3
+    )
 
     steg = JPEGSteganography(cover_path)
     steg.encode(out_path, message)
