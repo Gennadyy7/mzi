@@ -7,13 +7,11 @@ class JPEGSteganography:
     BLOCK_SIZE: int = 8
     MAX_MESSAGE_LENGTH: int = 65535
 
-    def __init__(self, quality: int = 95) -> None:
-        if not (1 <= quality <= 100):
-            raise ValueError("Качество должно быть в диапазоне [1, 100]")
-        self.quality = quality
+    def __init__(self) -> None:
+        pass
 
     def hide_message(self, input_path: str, message: str, output_path: str) -> None:
-        if len(message) == 0:
+        if not message:
             raise ValueError("Сообщение не может быть пустым")
         if len(message.encode('utf-8')) > self.MAX_MESSAGE_LENGTH:
             raise ValueError(f"Сообщение слишком длинное (максимум {self.MAX_MESSAGE_LENGTH} байт в UTF-8)")
@@ -40,7 +38,8 @@ class JPEGSteganography:
         reconstructed = self._apply_idct_to_image(modified_dct)
         reconstructed = np.clip(reconstructed, 0, 255).astype(np.uint8)
         output_image = Image.fromarray(reconstructed, mode='L')
-        output_image.save(output_path, 'JPEG', quality=self.quality, subsampling=0)
+
+        output_image.save(output_path, 'PNG')
 
     def extract_message(self, image_path: str) -> str:
         image = Image.open(image_path).convert('L')
@@ -50,19 +49,20 @@ class JPEGSteganography:
 
         length_bits = self._extract_bits_from_dct(dct_coeffs, 16)
         if len(length_bits) < 16:
-            raise ValueError("Невозможно извлечь длину сообщения — недостаточно данных")
+            raise ValueError("Невозможно извлечь длину сообщения")
 
         length_bytes = self._bits_to_bytes(length_bits)
         message_length = int.from_bytes(length_bytes, byteorder='big')
 
-        if message_length == 0 or message_length > self.MAX_MESSAGE_LENGTH:
+        if not (1 <= message_length <= self.MAX_MESSAGE_LENGTH):
             raise ValueError("Некорректная длина сообщения")
 
-        message_bits = self._extract_bits_from_dct(dct_coeffs, 16 + message_length * 8)
-        if len(message_bits) < 16 + message_length * 8:
+        total_bits_needed = 16 + message_length * 8
+        all_bits = self._extract_bits_from_dct(dct_coeffs, total_bits_needed)
+        if len(all_bits) < total_bits_needed:
             raise ValueError("Недостаточно данных для извлечения полного сообщения")
 
-        message_bytes = self._bits_to_bytes(message_bits[16:])
+        message_bytes = self._bits_to_bytes(all_bits[16:])
         return message_bytes.decode('utf-8')
 
     @staticmethod
@@ -147,16 +147,16 @@ class JPEGSteganography:
 
                         int_coeff = int(round(coeff.item()))
                         if bits[bit_index] == 0:
-                            int_coeff = int_coeff if (int_coeff % 2 == 0) else int_coeff - 1
+                            int_coeff = int_coeff - (int_coeff & 1)
                         else:
-                            int_coeff = int_coeff if (int_coeff % 2 == 1) else int_coeff + 1
+                            int_coeff = int_coeff | 1
                         block[u, v] = float(int_coeff)
                         bit_index += 1
 
                 dct_copy[i:i + self.BLOCK_SIZE, j:j + self.BLOCK_SIZE] = block
 
         if bit_index < len(bits):
-            raise RuntimeError("Не удалось внедрить все биты — несоответствие подсчёта")
+            raise RuntimeError("Не удалось внедрить все биты — внутренняя ошибка")
         return dct_copy
 
     def _extract_bits_from_dct(self, dct_coeffs: np.ndarray, num_bits: int) -> list[int]:
