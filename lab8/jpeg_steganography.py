@@ -8,12 +8,12 @@ def zigzag_indices(n: int = 8) -> list[tuple[int, int]]:
     inds: list[tuple[int, int]] = []
     for s in range(2 * n - 1):
         if s % 2 == 0:
-            for i in range(s + 1):
+            for i in range(s + 1):  # (0,s) → (s,0)
                 j = s - i
                 if i < n and j < n:
                     inds.append((i, j))
         else:
-            for j in range(s + 1):
+            for j in range(s + 1):  # (s,0) → (0,s)
                 i = s - j
                 if i < n and j < n:
                     inds.append((i, j))
@@ -71,7 +71,7 @@ class JPEGSteganography:
         coef = jpeg_obj.coef_arrays[0]
         h, w = coef.shape
         blocks = (h // 8) * (w // 8)
-        return blocks * (8 * 8 - 1)
+        return blocks * (8 * 8 - 1)  # 63 бита на блок
 
     def encode(self, out_path: str, message: str, verbose: bool = True) -> None:
         jpg = jio.read(self.path)
